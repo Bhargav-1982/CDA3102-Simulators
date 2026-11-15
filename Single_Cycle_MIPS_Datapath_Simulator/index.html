@@ -1,0 +1,5204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Single-Cycle MIPS Datapath Simulator</title>
+<style>
+:root{--bg:#f7f6f2;--fg:#1d2430;--panel:#ffffff;--line:#cfd4dc;--muted:#5d6675;--accent:#d9792a;--accent-soft:#fbe9d8;--blue:#1f4fd8;--good:#2e7d4f;--chip:#eef1f6;--red:#c62828;
+ --left:260px;--right:330px;--leftf:250px;
+ --font-ui:"Segoe UI",system-ui,-apple-system,sans-serif;--font-mono:Consolas,"JetBrains Mono","Courier New",monospace}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-ui);font-size:13px;padding:6px 12px 6px;display:flex;flex-direction:column;overflow:hidden}
+h1{font-size:17px;margin:0 0 6px}
+h2{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
+.note{color:var(--muted);font-size:11.5px;margin:3px 0 0}
+button{font:inherit;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 10px;color:var(--fg);cursor:pointer}
+button:hover{border-color:var(--accent)}
+button:disabled{opacity:.45;cursor:default}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.editor{margin-bottom:8px}
+.editor label{display:block;font-size:11.5px;color:var(--muted);margin-bottom:3px}
+.editor label .hint{color:var(--fg);font-weight:600;background:var(--accent-soft);padding:1px 4px;border-radius:4px}
+textarea{width:100%;white-space:pre;overflow:auto;font-family:var(--font-mono);font-size:12px;line-height:1.4;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--fg);resize:vertical}
+#loadMsg{font-size:12.5px;margin-top:6px;min-height:18px}
+#loadMsg.err{color:var(--red);font-weight:700;font-size:14px;overflow-wrap:anywhere;background:#fde8e8;border:2px solid var(--red);border-radius:6px;padding:8px 10px;display:flex;gap:8px;align-items:flex-start}
+#loadMsg.err .warn{font-size:26px;line-height:1;flex:none}
+#loadMsg.ok{color:var(--good)}
+.stages{display:flex;gap:5px;flex-wrap:nowrap;margin:0 0 5px}
+/* Chips are sized to their text (at most two lines) and the strip has a fixed height, so the diagram below never moves when the active chip changes */
+.stage{flex:1 1 auto;text-align:center;padding:3px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px;line-height:1.25;min-width:0;background:var(--panel);color:var(--fg);display:flex;align-items:center;justify-content:center;height:44px;overflow:hidden}
+.stage.done{color:var(--muted);background:var(--chip)}
+.stage.skip{color:var(--muted);border-style:dashed;text-decoration:line-through;background:transparent}
+.stage.cur{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:700}
+.stage.end{flex:0 1 auto}
+/* hidden bold copy of the text: the chip keeps the width of its bold form, so it does not change size when it becomes the active (bold) chip */
+.stage{flex-direction:column}
+.stage .w{font-weight:700;height:0;overflow:hidden;visibility:hidden}
+.diagram{position:relative;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:#fff;flex:1;min-height:120px;display:flex;align-items:center;justify-content:center}
+.diagram svg{display:block;width:100%;height:100%}
+.focusBtn{font-size:13px;font-weight:700;padding:5px 12px;background:#111;color:#fff;border-color:#111}
+.focusBtn:hover{background:#333;border-color:#333;color:#fff}
+.controls{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}
+.controls label{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px}
+.controls .keys{margin-left:auto;margin-right:14px;font-size:11.5px;color:var(--muted)}
+#speedText{min-width:118px;display:inline-block}
+.now{margin-top:6px;padding:6px 10px;background:var(--accent-soft);border-left:4px solid var(--accent);border-radius:6px;font-size:16px;line-height:1.4;height:80px;overflow:auto}
+.now.err{background:#fde8e8;border-left-color:var(--red)}
+/* One-screen layout: left column (program), center (diagram), right column (values). Each side column scrolls on its own. */
+.main{display:grid;grid-template-columns:var(--left) 8px minmax(0,1fr) 8px var(--right);gap:4px;align-items:stretch;flex:1;min-height:0}
+/* Drag handles between the columns (double-click resets). The widths are kept in the CSS variables --left, --right and --leftf (Datapath view). */
+.gutter{cursor:col-resize;border-radius:4px;background:linear-gradient(var(--line),var(--line)) center/2px 60% no-repeat;align-self:stretch}
+.gutter:hover,.gutter.drag{background:linear-gradient(var(--accent),var(--accent)) center/3px 100% no-repeat}
+.focusOnly{display:none}
+.side{overflow:auto;min-width:0;min-height:0}
+.center{min-width:0;min-height:0;display:flex;flex-direction:column}
+@media (max-width:1500px){body:not(.focus) .stage{font-size:11px;padding:3px 5px}body:not(.focus) .now{font-size:14px}}
+@media (max-width:1250px){body{overflow:auto;display:block;height:auto}.main{grid-template-columns:1fr;display:block}.gutter{display:none}.side{max-height:none}.center{display:block}.diagram{display:block}.diagram svg{height:auto}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px;min-width:0;margin-bottom:8px}
+.prog{font-family:var(--font-mono);font-size:12px;line-height:1.55;max-height:300px;overflow:auto}
+.prog .ln{display:flex;gap:6px;align-items:center;padding:0 4px;border-radius:4px;white-space:nowrap;cursor:pointer}
+.prog .ln:hover{background:var(--chip)}
+.prog .ln.cur{background:var(--accent-soft);font-weight:700}
+.prog .ln.done{color:var(--muted)}
+.prog .ln.setup{color:#7a8290;font-style:italic}
+.prog .ln.label{color:#7a8290;cursor:default}
+.prog .bp{width:11px;height:11px;border:1.5px solid var(--muted);border-radius:50%;display:inline-block;flex:none;cursor:pointer}
+.prog .bp.on{background:var(--red);border-color:var(--red)}
+.prog .addr{color:var(--muted)}
+table{border-collapse:collapse;width:100%;font-size:12px;font-variant-numeric:tabular-nums}
+td,th{border:1px solid var(--line);padding:2px 5px;text-align:left;vertical-align:top}
+th{background:var(--chip);font-weight:600}
+.mono{font-family:var(--font-mono)}
+.sig th,.sig td{text-align:center;padding:2px 3px;font-size:11.5px}
+.sig td{font-family:var(--font-mono)}
+.sig td.one{color:var(--good);font-weight:700}
+.sig td.x{color:var(--muted)}
+.bits{display:flex;gap:3px;margin:6px 0;flex-wrap:wrap}
+.bits div{padding:4px 5px;border-radius:4px;font-family:var(--font-mono);font-size:11.5px;color:#fff;text-align:center}
+.bits small{display:block;font-family:var(--font-ui);font-size:10px;opacity:.92}
+.f-op{background:#7b3fa0}.f-rs{background:#1f7a3f}.f-rt{background:#1f4fd8}.f-rd{background:#0e7490}.f-sh{background:#6b7280}.f-fn{background:#b45309}.f-imm{background:#c0392b}
+.chg{background:var(--accent-soft);font-weight:700}
+.two{margin-top:8px}
+.two > div{margin-top:8px}
+.scroll{max-height:150px;overflow:auto}
+#regsWrap{max-height:210px}
+footer{margin-top:6px;text-align:center;color:var(--muted);font-size:11.5px}
+/* Datapath view (body.focus): the program box, the bit fields and the register/memory tables are hidden */
+body.focus .editor,body.focus .right,body.focus h1,body.focus footer{display:none}
+body.focus{padding:6px 10px}
+body.focus .main{grid-template-columns:var(--leftf) 8px minmax(0,1fr)}
+body.focus .gutter.r{display:none}
+body.focus .focusOnly{display:block}
+body.focus .prog{max-height:30vh;font-size:12px}
+body.focus #fInfo .two{margin-top:8px}
+body.focus #fInfo .scroll{max-height:150px}
+body.focus #fInfo #regsWrap{max-height:170px}
+body.focus .stage{font-size:13px;height:46px}
+.fsig{display:flex;flex-wrap:wrap;gap:3px}
+.fsig span{font-family:var(--font-mono);font-size:11px;border:1px solid var(--line);border-radius:4px;padding:1px 4px;background:var(--chip)}
+.fsig span.one{color:var(--good);font-weight:700}
+.fsig span.x{color:var(--muted)}
+#fWires{font-size:11.5px}
+/* Diagram highlight styles */
+#dp .hot{stroke:#e2873e !important;stroke-width:7px !important}
+#dp .hotbox{stroke:#e2873e !important;stroke-width:5px !important}
+#dp .seton{stroke:#dca878 !important;stroke-width:4.5px !important}
+#dp .vlabel text{font-family:Consolas,"Courier New",monospace;font-weight:700;font-size:26px;fill:#c2410c}
+#dp .vlabel rect{fill:#fff3c4;stroke:#e3c04f;stroke-width:2px}
+#dp .vlabel.lite text{fill:#8a6d3b;font-weight:600;font-size:22px}
+#dp .vlabel.lite rect{fill:#fdf6dd;stroke:#e9d9a0;stroke-width:1.5px}
+#dp .xmark{stroke:#9aa3ad;stroke-width:6px;stroke-linecap:round;opacity:.75}
+#dp .edgewrite{fill:none;stroke:#5854e5;stroke-width:5px;stroke-dasharray:16 10}
+#dp #text10-1{display:none}
+</style>
+</head>
+<body>
+<h1>Single-Cycle MIPS Datapath Simulator</h1>
+
+<div class="main">
+<div class="side left">
+<div class="editor panel">
+    <label for="code"><b>Program.</b> <span class="hint">The box below holds a sample program. Type or paste your own program or instructions there, then press Load.</span> Supported instructions: <b>add, sub, and, or, slt, addi, lw, sw, beq</b> &#8212; no others. One instruction per line, operands separated by commas; labels and # comments allowed. li lines are accepted as setup lines and run without animation. Any other instruction is reported as an error when you press Load.</label>
+    <textarea id="code" rows="12" spellcheck="false"></textarea>
+    <div class="controls" style="margin-top:6px"><button class="primary" id="btnLoad">Load</button><span class="note" style="margin:0">Load checks every line, assigns addresses from 0x00400000, fills the Program panel, and sets PC to the first line. Press Next step to trace the first instruction (leading li lines run at once).</span></div>
+    <div id="loadMsg"></div>
+</div>
+  <div class="panel">
+    <h2>Program</h2>
+    <div class="prog" id="prog"></div>
+    <p class="note">Click a line: <b>Run to here</b> (the lines before it run instantly, without animation). Click the circle: breakpoint.</p>
+    <p class="note" id="pcLine"><b>PC</b> = 0x00400000</p>
+  </div>
+  <div class="panel focusOnly" id="fInfo">
+    <h2>Current instruction</h2>
+    <div class="mono" id="fText" style="font-weight:700">&nbsp;</div>
+    <h2 style="margin-top:8px">Control signals</h2>
+    <div class="fsig" id="fSig"></div>
+    <h2 style="margin-top:8px">Values on the wires (this step)</h2>
+    <table id="fWires"></table>
+  </div>
+</div>
+<div class="gutter l" id="gutL" title="Drag to resize the columns. Double-click to reset."></div>
+
+<div class="center">
+<div class="stages" id="strip"></div>
+
+<div class="diagram" id="diagramWrap">
+<svg id="dp" xmlns="http://www.w3.org/2000/svg" viewBox="10 15 3000 1447" width="100%" role="img" aria-label="Single-cycle MIPS datapath">
+  
+  
+  
+  <defs
+     id="defs3">
+    <marker
+       style="overflow:visible"
+       id="Triangle"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       markerWidth="1"
+       markerHeight="1"
+       viewBox="0 0 1 1"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.5)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path135" />
+    </marker>
+    <marker
+       id="arrD"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M2 1L8 5L2 9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1" />
+    </marker>
+    <marker
+       id="arrC"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M2 1L8 5L2 9"
+         fill="none"
+         stroke="#b5471b"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path2" />
+    </marker>
+    <marker
+       id="arrBig"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="14"
+       markerHeight="14"
+       markerUnits="userSpaceOnUse"
+       orient="auto-start-reverse">
+      <path
+         d="M1 0.5L9 5L1 9.5Z"
+         fill="#1c2430"
+         id="path3" />
+    </marker>
+    <marker
+       id="arrD-2"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-7" />
+    </marker>
+    <marker
+       id="arrBig-3"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="14"
+       markerHeight="14"
+       markerUnits="userSpaceOnUse"
+       orient="auto-start-reverse">
+      <path
+         d="M 1,0.5 9,5 1,9.5 Z"
+         fill="#1c2430"
+         id="path3-2" />
+    </marker>
+    <marker
+       id="arrBig-0"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="9"
+       markerHeight="9"
+       orient="auto-start-reverse">
+      <path
+         d="M 1,0.5 9,5 1,9.5 Z"
+         fill="#1c2430"
+         id="path3-8" />
+    </marker>
+    <marker
+       id="arrBig-0-0"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="9"
+       markerHeight="9"
+       orient="auto-start-reverse">
+      <path
+         d="M 1,0.5 9,5 1,9.5 Z"
+         fill="#1c2430"
+         id="path3-8-8" />
+    </marker>
+    <marker
+       id="arrBig-0-1"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="9"
+       markerHeight="9"
+       orient="auto-start-reverse">
+      <path
+         d="M 1,0.5 9,5 1,9.5 Z"
+         fill="#1c2430"
+         id="path3-8-3" />
+    </marker>
+    <marker
+       id="arrD-1"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-3" />
+    </marker>
+    <marker
+       id="arrD-5"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-9" />
+    </marker>
+    <marker
+       id="arrD-1-4"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-3-0" />
+    </marker>
+    <marker
+       id="arrD-7"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-4" />
+    </marker>
+    <marker
+       id="arrD-3"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-35" />
+    </marker>
+    <marker
+       id="arrBig-6"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="9"
+       markerHeight="9"
+       orient="auto-start-reverse">
+      <path
+         d="M 1,0.5 9,5 1,9.5 Z"
+         fill="#1c2430"
+         id="path3-4" />
+    </marker>
+    <marker
+       id="arrD-32"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-8" />
+    </marker>
+    <marker
+       id="arrD-4"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-5" />
+    </marker>
+    <marker
+       id="arrC-0"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#b5471b"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path2-0" />
+    </marker>
+    <marker
+       id="arrC-02"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#b5471b"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path2-9" />
+    </marker>
+    <marker
+       id="arrD-9"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-57" />
+    </marker>
+    <marker
+       id="arrD-50"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-41" />
+    </marker>
+    <marker
+       id="arrC-2"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#b5471b"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path2-2" />
+    </marker>
+    <marker
+       id="arrC-2-4"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#b5471b"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path2-2-8" />
+    </marker>
+    <marker
+       id="arrC-2-4-8"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#b5471b"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path2-2-8-8" />
+    </marker>
+    <marker
+       id="arrC-2-4-8-8"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#b5471b"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path2-2-8-8-7" />
+    </marker>
+    <marker
+       id="arrC-2-4-8-0"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#b5471b"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path2-2-8-8-8" />
+    </marker>
+    <marker
+       id="arrC-2-4-8-8-5"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#b5471b"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path2-2-8-8-7-7" />
+    </marker>
+    <marker
+       id="arrBig-0-8"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="9"
+       markerHeight="9"
+       orient="auto-start-reverse">
+      <path
+         d="M 1,0.5 9,5 1,9.5 Z"
+         fill="#1c2430"
+         id="path3-8-9" />
+    </marker>
+    <marker
+       id="arrBig-0-8-5"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="9"
+       markerHeight="9"
+       orient="auto-start-reverse">
+      <path
+         d="M 1,0.5 9,5 1,9.5 Z"
+         fill="#1c2430"
+         id="path3-8-9-6" />
+    </marker>
+    <marker
+       id="arrD-10"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-75" />
+    </marker>
+    <marker
+       id="arrD-74"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-6" />
+    </marker>
+    <marker
+       id="arrD-10-9"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-75-2" />
+    </marker>
+    <marker
+       id="arrD-74-7"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-6-9" />
+    </marker>
+    <marker
+       id="arrD-74-9"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-6-5" />
+    </marker>
+    <marker
+       id="arrD-74-9-3"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-6-5-4" />
+    </marker>
+    <marker
+       id="arrD-74-9-1"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-6-5-3" />
+    </marker>
+    <marker
+       id="arrD-74-9-35"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-6-5-2" />
+    </marker>
+    <marker
+       id="arrD-74-9-35-9"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-6-5-2-6" />
+    </marker>
+    <marker
+       id="arrD-74-9-35-8"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-6-5-2-2" />
+    </marker>
+    <marker
+       id="arrD-74-9-35-6"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-6-5-2-1" />
+    </marker>
+    <marker
+       id="arrBig-0-8-5-5"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="9"
+       markerHeight="9"
+       orient="auto-start-reverse">
+      <path
+         d="M 1,0.5 9,5 1,9.5 Z"
+         fill="#1c2430"
+         id="path3-8-9-6-1" />
+    </marker>
+    <marker
+       id="arrD-74-9-35-9-8"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-6-5-2-6-1" />
+    </marker>
+    <marker
+       id="arrD-74-9-8"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-6-5-8" />
+    </marker>
+    <marker
+       id="arrD-74-7-3"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-6-9-7" />
+    </marker>
+    <marker
+       id="arrD-74-3"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-6-98" />
+    </marker>
+    <marker
+       id="arrD-74-2"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-6-3" />
+    </marker>
+    <marker
+       id="arrD-74-4"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-6-0" />
+    </marker>
+    <marker
+       id="arrD-74-97"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-6-8" />
+    </marker>
+    <marker
+       id="arrD-74-8"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-6-80" />
+    </marker>
+    <marker
+       id="arrC-2-4-8-3"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#b5471b"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path2-2-8-8-0" />
+    </marker>
+    <marker
+       id="arrC-2-4-8-0-4"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#b5471b"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path2-2-8-8-8-3" />
+    </marker>
+    <marker
+       id="arrD-1-8"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-3-3" />
+    </marker>
+    <marker
+       id="arrD-1-46"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-3-9" />
+    </marker>
+    <marker
+       id="arrD-1-49"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-3-05" />
+    </marker>
+    <marker
+       id="arrD-1-5"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-3-7" />
+    </marker>
+    <marker
+       id="arrD-1-49-8"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-3-05-4" />
+    </marker>
+    <marker
+       id="arrD-1-49-0"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-3-05-8" />
+    </marker>
+    <marker
+       id="arrD-1-49-0-1"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-3-05-8-6" />
+    </marker>
+    <marker
+       id="arrD-74-9-1-2"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-6-5-3-5" />
+    </marker>
+    <marker
+       id="arrD-74-9-1-4"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-6-5-3-57" />
+    </marker>
+    <marker
+       id="arrD-74-9-1-4-3"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-6-5-3-57-0" />
+    </marker>
+    <marker
+       id="arrD-74-9-1-4-3-5"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-6-5-3-57-0-6" />
+    </marker>
+    <marker
+       id="arrC-2-4-8-8-8"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#b5471b"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path2-2-8-8-7-1" />
+    </marker>
+    <marker
+       id="arrC-2-4-8-8-8-9"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#b5471b"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path2-2-8-8-7-1-0" />
+    </marker>
+    <marker
+       id="arrC-2-4-8-8-8-9-8"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#b5471b"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path2-2-8-8-7-1-0-6" />
+    </marker>
+    <marker
+       id="arrC-2-4-8-8-8-9-81"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#b5471b"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path2-2-8-8-7-1-0-0" />
+    </marker>
+    <marker
+       id="arrC-2-4-8-8-8-9-8-7"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#b5471b"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path2-2-8-8-7-1-0-6-0" />
+    </marker>
+    <marker
+       id="arrD-74-9-35-9-9"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-6-5-2-6-5" />
+    </marker>
+    <marker
+       id="arrD-74-9-1-2-7"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-6-5-3-5-7" />
+    </marker>
+    <marker
+       id="arrD-10-9-4"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-75-2-6" />
+    </marker>
+    <marker
+       id="arrD-10-9-3"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-75-2-5" />
+    </marker>
+    <marker
+       id="arrD-10-9-9"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-75-2-54" />
+    </marker>
+    <marker
+       id="arrD-10-9-5"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-75-2-56" />
+    </marker>
+    <marker
+       id="arrD-10-9-5-0"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-75-2-56-0" />
+    </marker>
+    <marker
+       id="arrD-14"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-0" />
+    </marker>
+    <marker
+       id="arrD-74-9-35-9-9-7"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-6-5-2-6-5-2" />
+    </marker>
+    <marker
+       id="arrD-10-9-3-6"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-75-2-5-7" />
+    </marker>
+    <marker
+       id="arrD-10-9-3-1"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-75-2-5-9" />
+    </marker>
+    <marker
+       id="arrD-10-9-5-2"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-75-2-56-3" />
+    </marker>
+    <marker
+       id="arrD-0"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-94" />
+    </marker>
+    <marker
+       id="arrD-24"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="8"
+       markerHeight="8"
+       orient="auto-start-reverse">
+      <path
+         d="M 2,1 8,5 2,9"
+         fill="none"
+         stroke="#5a6472"
+         stroke-width="1.9"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         id="path1-55" />
+    </marker>
+  </defs>
+  <rect
+     x="72.992058"
+     y="617.17999"
+     width="127.43851"
+     height="115.16283"
+     rx="12.743852"
+     fill="#eef2f8"
+     stroke="#2c3e63"
+     stroke-width="1.56398"
+     id="rect4" />
+  <text
+     x="122.48826"
+     y="671.91681"
+     text-anchor="middle"
+     dominant-baseline="central"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="27px"
+     font-weight="700"
+     fill="#1c2430"
+     id="text4">PC</text>
+  <rect
+     x="71.951729"
+     y="234.28036"
+     width="131.34145"
+     height="329.76971"
+     rx="13.134144"
+     fill="#fdeee0"
+     stroke="#2c3e63"
+     stroke-width="1.89984"
+     id="rect5" />
+  <text
+     x="134.72157"
+     y="435.7406"
+     text-anchor="middle"
+     dominant-baseline="central"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="27px"
+     font-weight="700"
+     fill="#1c2430"
+     id="text5">PCSrc</text>
+  <text
+     x="134.70261"
+     y="473.2999"
+     text-anchor="middle"
+     dominant-baseline="central"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="18px"
+     fill="#454f5e"
+     id="text6"
+     style="font-size:22.4px"><tspan
+       style="font-weight:bold;font-size:22.4px;fill:#916f6f"
+       id="tspan126">MUX</tspan></text>
+  <rect
+     x="493.40967"
+     y="222.96048"
+     width="218.85722"
+     height="79.243309"
+     rx="14.590482"
+     fill="#eef2f8"
+     stroke="#2c3e63"
+     stroke-width="1.49113"
+     id="rect6" />
+  <text
+     x="599.99365"
+     y="261.33179"
+     text-anchor="middle"
+     dominant-baseline="central"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="27px"
+     font-weight="700"
+     fill="#1c2430"
+     id="text7"
+     style="font-size:32px">PC + 4 Adder</text>
+  <rect
+     x="411.49515"
+     y="563.73492"
+     width="188.76991"
+     height="380.53021"
+     rx="8.6294823"
+     fill="#eef2f8"
+     stroke="#2c3e63"
+     stroke-width="1.46982"
+     id="rect7" />
+  <text
+     x="505.05136"
+     y="727.11584"
+     text-anchor="middle"
+     dominant-baseline="central"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="27px"
+     font-weight="700"
+     fill="#1c2430"
+     id="text8"
+     style="font-size:32px"><tspan
+       id="tspan96"
+       x="505.05136"
+       y="727.11584">Instruction</tspan><tspan
+       id="tspan97"
+       x="505.05136"
+       y="767.11584">Memory</tspan></text>
+  <rect
+     x="750.46552"
+     y="195.02448"
+     width="866.4588"
+     height="119.15407"
+     rx="15.40371"
+     fill="#fde8e8"
+     stroke="#8a1f1f"
+     stroke-width="1.64292"
+     id="rect9" />
+  <text
+     x="1154.6917"
+     y="238.89474"
+     text-anchor="middle"
+     dominant-baseline="central"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="27"
+     font-weight="700"
+     fill="#1c2430"
+     id="text10"
+     style="font-size:32px">Main Control Unit</text>
+  <text
+     x="1146.1697"
+     y="276.72128"
+     text-anchor="middle"
+     dominant-baseline="central"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="18px"
+     fill="#454f5e"
+     id="text11"
+     style="font-size:22.4px"><tspan
+       style="font-weight:bold;font-size:22.4px;fill:#916f6f"
+       id="tspan125">opcode -&gt; 7 signals + ALUOp</tspan></text>
+  <rect
+     x="1690.0585"
+     y="202.08855"
+     width="647.03027"
+     height="111.85299"
+     rx="27.243378"
+     fill="#eef2f8"
+     stroke="#2c3e63"
+     stroke-width="2.11689"
+     id="rect11" />
+  <text
+     x="2008.8625"
+     y="236.54155"
+     text-anchor="middle"
+     dominant-baseline="central"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="27px"
+     font-weight="700"
+     fill="#1c2430"
+     id="text12"
+     style="font-size:32px">Branch Adder</text>
+  <rect
+     x="816.02319"
+     y="740.49994"
+     width="169.70763"
+     height="173.70616"
+     rx="18.102148"
+     fill="#fdeee0"
+     stroke="#2c3e63"
+     stroke-width="1.77326"
+     id="rect12" />
+  <text
+     x="900.91852"
+     y="815.33875"
+     text-anchor="middle"
+     dominant-baseline="central"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="27px"
+     font-weight="700"
+     fill="#1c2430"
+     id="text13"
+     style="font-size:32px">RegDst</text>
+  <text
+     x="895.57245"
+     y="852.81787"
+     text-anchor="middle"
+     dominant-baseline="central"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="18px"
+     fill="#454f5e"
+     id="text14"
+     style="font-size:22.4px"><tspan
+       style="font-weight:bold;font-size:22.4px;fill:#916f6f"
+       id="tspan123">MUX</tspan></text>
+  <rect
+     x="1045.0112"
+     y="499.71274"
+     width="339.8504"
+     height="500.15622"
+     rx="13.594017"
+     fill="#eaf2ea"
+     stroke="#2c3e63"
+     stroke-width="1.84379"
+     id="rect14" />
+  <text
+     x="1213.2819"
+     y="533.80365"
+     text-anchor="middle"
+     dominant-baseline="central"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="27px"
+     font-weight="700"
+     fill="#1c2430"
+     id="text15"
+     style="font-size:32px">Register File</text>
+  <text
+     x="1208.2385"
+     y="586.36157"
+     text-anchor="middle"
+     dominant-baseline="central"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="18px"
+     fill="#454f5e"
+     id="text16"
+     style="font-size:22.4px"><tspan
+       style="font-weight:bold;font-size:22.4px;fill:#916f6f"
+       id="tspan120">(32 x 32-bit)</tspan></text>
+  <rect
+     x="1050.0919"
+     y="1054.092"
+     width="399.8161"
+     height="202.79482"
+     rx="15.992643"
+     fill="#eaf2ea"
+     stroke="#2c3e63"
+     stroke-width="2.18391"
+     id="rect16" />
+  <text
+     x="1242.5532"
+     y="1097.3406"
+     text-anchor="middle"
+     dominant-baseline="central"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="27"
+     font-weight="700"
+     fill="#1c2430"
+     id="text17"
+     style="font-size:32px">Sign Extender</text>
+  <text
+     x="1239.3618"
+     y="1141.6635"
+     text-anchor="middle"
+     dominant-baseline="central"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="18px"
+     fill="#454f5e"
+     id="text18"
+     style="font-size:25.6px"><tspan
+       style="font-weight:bold;font-size:25.6px;fill:#916f6f"
+       id="tspan121">imm[15:0] -&gt; 32-bit</tspan></text>
+  <rect
+     x="1549.9702"
+     y="688.18884"
+     width="192.09717"
+     height="205.84088"
+     rx="20.490364"
+     fill="#fdeee0"
+     stroke="#2c3e63"
+     stroke-width="1.94058"
+     id="rect18" />
+  <text
+     x="1651.7378"
+     y="742.64355"
+     text-anchor="end"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text74-6-3"
+     style="fill:#0000ff"><tspan
+       style="fill:#2b0000"
+       id="tspan118-2">input 0 (RD2)</tspan></text>
+  <text
+     x="1648.2266"
+     y="781.40997"
+     text-anchor="middle"
+     dominant-baseline="central"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="27px"
+     font-weight="700"
+     fill="#1c2430"
+     id="text19"
+     style="font-size:32px">ALUSrc</text>
+  <text
+     x="1643.4557"
+     y="815.01245"
+     text-anchor="middle"
+     dominant-baseline="central"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="18px"
+     fill="#454f5e"
+     id="text20"
+     style="font-size:22.4px"><tspan
+       style="font-weight:bold;font-size:22.4px;fill:#916f6f"
+       id="tspan119">MUX</tspan></text>
+  <rect
+     x="1799.8774"
+     y="503.87738"
+     width="330.24524"
+     height="338.45981"
+     rx="16.01189"
+     fill="#eaf2ea"
+     stroke="#2c3e63"
+     stroke-width="1.75476"
+     id="rect20" />
+  <text
+     x="1958.8474"
+     y="670.33698"
+     text-anchor="middle"
+     dominant-baseline="central"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="27px"
+     font-weight="700"
+     fill="#1c2430"
+     id="text21"
+     style="font-size:32px">ALU</text>
+  <rect
+     x="1778.0905"
+     y="934.84369"
+     width="374.31519"
+     height="169.87076"
+     rx="18.148617"
+     fill="#fde8e8"
+     stroke="#8a1f1f"
+     stroke-width="2.12925"
+     id="rect21" />
+  <text
+     x="1800"
+     y="1039.7791"
+     text-anchor="start"
+     dominant-baseline="central"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="22.4px"
+     font-weight="bold"
+     id="text41-9"><tspan
+       style="fill:#8a3010;font-size:20.8px"
+       id="tspan106-3">ALUOp</tspan><tspan
+       style="fill:#916f6f"
+       id="tspan122"> + funct -&gt; ALUControl</tspan></text>
+  <text
+     x="1956.2252"
+     y="993.01318"
+     text-anchor="middle"
+     dominant-baseline="central"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="27px"
+     font-weight="700"
+     fill="#1c2430"
+     id="text22"
+     style="font-size:32px">ALU Decoder</text>
+  <rect
+     x="2229.7971"
+     y="478.79697"
+     width="380.40604"
+     height="279.16971"
+     rx="16.017097"
+     fill="#eaf2ea"
+     stroke="#2c3e63"
+     stroke-width="1.59393"
+     id="rect23" />
+  <text
+     x="2423.46"
+     y="526.33801"
+     text-anchor="middle"
+     dominant-baseline="central"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="27px"
+     font-weight="700"
+     fill="#1c2430"
+     id="text24"
+     style="font-size:32px">Data Memory</text>
+  <rect
+     x="2656.0466"
+     y="477.04672"
+     width="208.23988"
+     height="279.90656"
+     rx="17.53599"
+     fill="#fdeee0"
+     stroke="#2c3e63"
+     stroke-width="2.09345"
+     id="rect24" />
+  <text
+     x="2763.3623"
+     y="655.70227"
+     text-anchor="middle"
+     dominant-baseline="central"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="27"
+     font-weight="700"
+     fill="#1c2430"
+     id="text25"
+     style="font-size:32px">MemToReg</text>
+  <text
+     x="2755.0291"
+     y="697.48004"
+     text-anchor="middle"
+     dominant-baseline="central"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="18px"
+     fill="#454f5e"
+     id="text26"
+     style="font-size:22.4px"><tspan
+       style="font-weight:bold;font-size:22.4px;fill:#916f6f"
+       id="tspan124">MUX</tspan></text>
+  <line
+     id="w1_s2"
+     x1="325.97958"
+     y1="667.36292"
+     x2="325.97958"
+     y2="542.06067"
+     stroke="#5a6472"
+     stroke-width="2.49456"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w1_s2-3"
+     x1="452.21924"
+     y1="543.52936"
+     x2="452.21924"
+     y2="255.18716"
+     stroke="#5a6472"
+     stroke-width="2.49456"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w1_s2-3-5"
+     x1="24.794117"
+     y1="336.83438"
+     x2="24.794117"
+     y2="122.76471"
+     stroke="#5a6472"
+     stroke-width="2.49456"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w7_s3-5-15"
+     x1="586.95148"
+     y1="124.47746"
+     x2="543.75012"
+     y2="124.47746"
+     stroke="#5a6472"
+     stroke-width="1.56622"
+     marker-end="url(#arrD-1-5)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-1-5)" />
+  <line
+     id="w2_s3"
+     x1="24.152884"
+     y1="335.87408"
+     x2="67.575317"
+     y2="335.20282"
+     stroke="#5a6472"
+     stroke-width="2.67731"
+     marker-end="url(#arrD)"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w2_s3-4"
+     x1="138.01361"
+     y1="155.22855"
+     x2="138.01361"
+     y2="230.4028"
+     stroke="#5a6472"
+     stroke-width="2.67731"
+     marker-end="url(#arrD-9)"
+     style="stroke-width:3;stroke-dasharray:none;marker-end:url(#arrD-9)" />
+  <line
+     id="w2_s3-0"
+     x1="134.52567"
+     y1="563.64648"
+     x2="134.52567"
+     y2="614.49548"
+     stroke="#5a6472"
+     stroke-width="2.67731"
+     marker-end="url(#arrD-4)"
+     style="stroke-width:3;stroke-dasharray:none;marker-end:url(#arrD-4)" />
+  <line
+     id="w3_s1"
+     x1="23.980583"
+     y1="124.51266"
+     x2="2220.6953"
+     y2="124.51266"
+     stroke="#5a6472"
+     stroke-width="2.6"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w7_s3-5-88"
+     x1="1218.1072"
+     y1="124.48574"
+     x2="1261.3085"
+     y2="124.48574"
+     stroke="#5a6472"
+     stroke-width="1.56622"
+     marker-end="url(#arrD-1-49)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-1-49)" />
+  <line
+     id="w4_s1"
+     x1="601.36078"
+     y1="601.54956"
+     x2="803.38068"
+     y2="601.54956"
+     stroke="#5a6472"
+     stroke-width="2.81567"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w4_s1-7"
+     x1="327.25208"
+     y1="543.7818"
+     x2="454.2579"
+     y2="543.7818"
+     stroke="#5a6472"
+     stroke-width="2.81567"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w4_s1-3"
+     x1="601.40826"
+     y1="913.86212"
+     x2="653.88849"
+     y2="913.86212"
+     stroke="#5a6472"
+     stroke-width="2.88614"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w4_s1-3-0"
+     x1="600.89539"
+     y1="787.80542"
+     x2="728.75537"
+     y2="787.80542"
+     stroke="#5a6472"
+     stroke-width="4.64847"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w7_s3-0-4"
+     x1="601.43689"
+     y1="788.32104"
+     x2="633.77991"
+     y2="788.32104"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-74-3)"
+     style="stroke-width:2;stroke-dasharray:none;marker-end:url(#arrD-74-3)" />
+  <line
+     id="w4_s1-3-9"
+     x1="600.79083"
+     y1="855.25909"
+     x2="701.99274"
+     y2="855.25909"
+     stroke="#5a6472"
+     stroke-width="4.13559"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w4_s2"
+     x1="802"
+     y1="604.55774"
+     x2="802"
+     y2="324.12039"
+     stroke="#5a6472"
+     stroke-width="2.49717"
+     marker-end="url(#arrD)"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w5_s1"
+     x1="599.95789"
+     y1="664.63977"
+     x2="1040.9252"
+     y2="664.63977"
+     stroke="#5a6472"
+     stroke-width="2.63599"
+     marker-end="url(#arrD)"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w6_s1"
+     x1="601.17889"
+     y1="724.81061"
+     x2="1041.5563"
+     y2="724.81061"
+     stroke="#5a6472"
+     stroke-width="2.63119"
+     marker-end="url(#arrD)"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w7_s3-0-48"
+     x1="599.49512"
+     y1="725.23364"
+     x2="631.83813"
+     y2="725.23364"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-74-4)"
+     style="stroke-width:2;stroke-dasharray:none;marker-end:url(#arrD-74-4)" />
+  <line
+     id="w7_s2"
+     x1="783.7807"
+     y1="720.31061"
+     x2="783.7807"
+     y2="773.23395"
+     stroke="#5a6472"
+     stroke-width="3.01665"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w7_s3"
+     x1="782.40961"
+     y1="772.75226"
+     x2="814.75269"
+     y2="772.75226"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD)"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w7_s3-5"
+     x1="452.14743"
+     y1="255.88687"
+     x2="491.83905"
+     y2="255.88687"
+     stroke="#5a6472"
+     stroke-width="1.56622"
+     marker-end="url(#arrD-1)"
+     style="stroke-width:2.74752;stroke-dasharray:none;marker-end:url(#arrD-1)" />
+  <line
+     id="w8_s2"
+     x1="727.47699"
+     y1="787.76886"
+     x2="727.47699"
+     y2="886.23151"
+     stroke="#5a6472"
+     stroke-width="1.85336"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w8_s3"
+     x1="726.75543"
+     y1="885.94647"
+     x2="815.04602"
+     y2="885.94647"
+     stroke="#5a6472"
+     stroke-width="2.1479"
+     marker-end="url(#arrD)"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w9_s1"
+     x1="652.89856"
+     y1="912.19458"
+     x2="652.89856"
+     y2="1190.2351"
+     stroke="#5a6472"
+     stroke-width="2.14152"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <path
+     id="w9_hop1-6"
+     d="m 699.77411,1177.7492 a 12,12 0 0 0 0,24"
+     fill="none"
+     stroke="#5a6472"
+     stroke-width="2.6"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w9_s4"
+     x1="699.26801"
+     y1="1286.9259"
+     x2="1956.2621"
+     y2="1286.9259"
+     stroke="#5a6472"
+     stroke-width="2.7677"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w9_s5"
+     x1="1956.2621"
+     y1="1287.1078"
+     x2="1956.2621"
+     y2="1107.8508"
+     stroke="#5a6472"
+     stroke-width="3.80512"
+     marker-end="url(#arrD)"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w10_s2"
+     x1="700.89508"
+     y1="854.50671"
+     x2="700.89508"
+     y2="1179.0479"
+     stroke="#5a6472"
+     stroke-width="2.44274"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w10_s2-6"
+     x1="283.56036"
+     y1="677.47333"
+     x2="283.56036"
+     y2="1346.827"
+     stroke="#5a6472"
+     stroke-width="4.58686"
+     style="stroke:#5a6472;stroke-width:3;stroke-dasharray:none;stroke-opacity:1" />
+  <line
+     id="w10_s2-9"
+     x1="698.33496"
+     y1="1199.9642"
+     x2="698.33496"
+     y2="1287.5466"
+     stroke="#5a6472"
+     stroke-width="2.09309"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w10_s3"
+     x1="652.07056"
+     y1="1189.0231"
+     x2="1048.4719"
+     y2="1189.0231"
+     stroke="#5a6472"
+     stroke-width="2.49787"
+     marker-end="url(#arrD)"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w11_s1"
+     x1="982.14282"
+     y1="938.58331"
+     x2="1040.7668"
+     y2="938.58331"
+     stroke="#5a6472"
+     stroke-width="2.03347"
+     marker-end="url(#arrD)"
+     style="stroke-width:3.053;stroke-dasharray:none" />
+  <line
+     id="w12_s1"
+     x1="1386.1217"
+     y1="584"
+     x2="1794.9001"
+     y2="584"
+     stroke="#5a6472"
+     stroke-width="2.67072"
+     marker-end="url(#arrD)"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line id="w13_s1" x1="1382.7854" y1="736.20337" x2="1435.1505" y2="736.20337" stroke="#5a6472" stroke-width="3.71974" style="stroke-width:3;stroke-dasharray:none" />
+  <line id="w13_s1b" x1="1435.1505" y1="736.20337" x2="1545.2419" y2="736.20337" stroke="#5a6472" stroke-width="3.71974" marker-end="url(#arrD)" style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w14_s2"
+     x1="1435.1505"
+     y1="738.18866"
+     x2="1435.1505"
+     y2="597.13782"
+     stroke="#5a6472"
+     stroke-width="2.6"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <path
+     id="w14_hop2"
+     d="m 1434.7268,597.13785 a 12,12 0 0 1 0,-24"
+     fill="none"
+     stroke="#5a6472"
+     stroke-width="2.6"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w14_s3"
+     x1="1434.7268"
+     y1="573.13782"
+     x2="1434.7268"
+     y2="485.13785"
+     stroke="#5a6472"
+     stroke-width="2.6"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w14_s4"
+     x1="1433.589"
+     y1="484"
+     x2="2185.6328"
+     y2="484"
+     stroke="#5a6472"
+     stroke-width="2.6"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w7_s3-0-9-0"
+     x1="1782.0599"
+     y1="484.15054"
+     x2="1814.403"
+     y2="484.15054"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-74-9-3)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-74-9-3)" />
+  <line
+     id="w14_s5"
+     x1="2184.6074"
+     y1="481.94937"
+     x2="2184.6074"
+     y2="568.92407"
+     stroke="#5a6472"
+     stroke-width="2.58481"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <path
+     id="w14_hop5"
+     d="m 2184.6075,568.92407 a 12,12 0 0 0 0,24"
+     fill="none"
+     stroke="#5a6472"
+     stroke-width="2.6" />
+  <line
+     id="w14_s6"
+     x1="2184.6074"
+     y1="592.92407"
+     x2="2184.6074"
+     y2="687.19824"
+     stroke="#5a6472"
+     stroke-width="3.19774"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w14_s7"
+     x1="2183.582"
+     y1="684.89014"
+     x2="2226.9121"
+     y2="684.89014"
+     stroke="#5a6472"
+     stroke-width="2.68908"
+     marker-end="url(#arrD)"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line id="w14_s7-2" x1="2130.8103" y1="581.41327" x2="2153.3291" y2="581.41327" stroke="#5a6472" stroke-width="2.68908" style="stroke-width:3;stroke-dasharray:none" />
+  <line id="w14_s7-2b" x1="2153.3291" y1="581.41327" x2="2226.6267" y2="581.41327" stroke="#5a6472" stroke-width="2.68908" marker-end="url(#arrD-32)" style="stroke-width:3;stroke-dasharray:none;marker-end:url(#arrD-32)" />
+  <line
+     id="w15_s3"
+     x1="1743.7776"
+     y1="745.74097"
+     x2="1794.7904"
+     y2="745.74097"
+     stroke="#5a6472"
+     stroke-width="3.60378"
+     marker-end="url(#arrD)"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w15_s3-7"
+     x1="986.27271"
+     y1="829.24365"
+     x2="1044.2471"
+     y2="829.24365"
+     stroke="#5a6472"
+     stroke-width="3.60378"
+     marker-end="url(#arrD-24)"
+     style="stroke-width:3.19816;stroke-dasharray:none;marker-end:url(#arrD-24)" />
+  <line
+     id="w16_s3"
+     x1="1500.3029"
+     y1="853.93414"
+     x2="1545.7203"
+     y2="853.93414"
+     stroke="#5a6472"
+     stroke-width="2.6199"
+     marker-end="url(#arrD)"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w17_s1"
+     x1="1450.7606"
+     y1="1185.0847"
+     x2="1500.9142"
+     y2="1185.0847"
+     stroke="#5a6472"
+     stroke-width="2.91134"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line id="w17_s3" x1="1500" y1="1186.6102" x2="1500" y2="854" stroke="#5a6472" stroke-width="6.56266" style="stroke-width:3;stroke-dasharray:none" />
+  <line id="w17_s3b" x1="1500" y1="854" x2="1500" y2="748.20337" stroke="#5a6472" stroke-width="6.56266" style="stroke-width:3;stroke-dasharray:none" />
+  <path
+     id="w17_hop3"
+     d="m 1500.8475,748.20339 a 12,12 0 0 1 0,-24"
+     fill="none"
+     stroke="#5a6472"
+     stroke-width="2.6"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w17_s4"
+     x1="1500"
+     y1="725.89832"
+     x2="1500"
+     y2="596"
+     stroke="#5a6472"
+     stroke-width="2.6"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <path
+     id="w17_hop4"
+     d="m 1500,596 a 12,12 0 0 1 0,-24"
+     fill="none"
+     stroke="#5a6472"
+     stroke-width="2.6"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w17_s5"
+     x1="1500"
+     y1="572"
+     x2="1500"
+     y2="496"
+     stroke="#5a6472"
+     stroke-width="2.6"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <path
+     id="w17_hop5"
+     d="m 1500,496 a 12,12 0 0 1 0,-24"
+     fill="none"
+     stroke="#5a6472"
+     stroke-width="2.6"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w17_s6"
+     x1="1499.8766"
+     y1="471.50635"
+     x2="1499.8766"
+     y2="426.09497"
+     stroke="#5a6472"
+     stroke-width="2.6"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w17_s6-3"
+     x1="1498.27"
+     y1="425.99692"
+     x2="1654.361"
+     y2="425.99692"
+     stroke="#5a6472"
+     stroke-width="2.6"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w17_s6-7"
+     x1="1653.335"
+     y1="427.04245"
+     x2="1653.335"
+     y2="257.35922"
+     stroke="#5a6472"
+     stroke-width="2.6"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w17_s8"
+     x1="1653.5922"
+     y1="259.09711"
+     x2="1687.6368"
+     y2="259.09711"
+     stroke="#5a6472"
+     stroke-width="2.88041"
+     marker-end="url(#arrD)"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w19_s1"
+     x1="2153.3291"
+     y1="582.97473"
+     x2="2153.3291"
+     y2="494.9747"
+     stroke="#5a6472"
+     stroke-width="2.6" />
+  <path
+     id="w19_hop1"
+     d="m 2153.329,496 a 12,12 0 0 1 0,-24"
+     fill="none"
+     stroke="#5a6472"
+     stroke-width="2.6"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w19_s2"
+     x1="2154.1765"
+     y1="472"
+     x2="2154.1765"
+     y2="415.18643"
+     stroke="#5a6472"
+     stroke-width="3.70357"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w19_s3"
+     x1="2152.3037"
+     y1="418"
+     x2="2756.5789"
+     y2="418"
+     stroke="#5a6472"
+     stroke-width="2.6"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w19_s4"
+     x1="2756"
+     y1="416.56311"
+     x2="2756"
+     y2="475.43195"
+     stroke="#5a6472"
+     stroke-width="2.6"
+     marker-end="url(#arrD)"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w20_s1"
+     x1="2186.7922"
+     y1="743.75342"
+     x2="2186.7922"
+     y2="1348.1051"
+     stroke="#5a6472"
+     stroke-width="2.91208"
+     style="stroke:#5a6472;stroke-width:3;stroke-dasharray:none;stroke-opacity:1" />
+  <line
+     id="w20_s1-5"
+     x1="2187.1523"
+     y1="742.84253"
+     x2="2131.6099"
+     y2="742.84253"
+     stroke="#5a6472"
+     stroke-width="2.91208"
+     style="stroke:#5a6472;stroke-width:3;stroke-dasharray:none;stroke-opacity:1" />
+  <line
+     id="w20_s2"
+     x1="2187.0693"
+     y1="1346"
+     x2="283.23383"
+     y2="1346"
+     stroke="#5a6472"
+     stroke-width="2.6138"
+     style="stroke:#5a6472;stroke-width:3;stroke-dasharray:none;stroke-opacity:1" />
+  <line
+     id="w21_s1"
+     x1="1960.6804"
+     y1="934.28223"
+     x2="1960.6804"
+     y2="844.28223"
+     stroke="#5a6472"
+     stroke-width="2.6"
+     marker-end="url(#arrD)" />
+  <line
+     id="w22_s3"
+     x1="2610.5925"
+     y1="595.6217"
+     x2="2651.5725"
+     y2="595.6217"
+     stroke="#5a6472"
+     stroke-width="2.96126"
+     marker-end="url(#arrD)"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w23_s1"
+     x1="2956.3894"
+     y1="598.58655"
+     x2="2956.3894"
+     y2="1402.4813"
+     stroke="#1c2430"
+     stroke-width="4.2"
+     style="stroke:#5a6472;stroke-width:2.99806;stroke-dasharray:none;stroke-opacity:1" />
+  <line
+     id="w23_s2"
+     x1="2959.6663"
+     y1="1399.2905"
+     x2="977.6344"
+     y2="1399.2905"
+     stroke="#1c2430"
+     stroke-width="4.2"
+     style="stroke:#5a6472;stroke-width:3;stroke-dasharray:none;stroke-opacity:1" />
+  <line
+     id="w23_s2-9"
+     x1="2956.3557"
+     y1="600.49426"
+     x2="2867.1086"
+     y2="600.49426"
+     stroke="#1c2430"
+     stroke-width="4.2"
+     style="stroke:#5a6472;stroke-width:3;stroke-dasharray:none;stroke-opacity:1" />
+  <line
+     id="w23_s3"
+     x1="981.05737"
+     y1="1400.5432"
+     x2="981.05737"
+     y2="1362.5432"
+     stroke="#1c2430"
+     stroke-width="4.2"
+     style="stroke:#5a6472;stroke-width:3;stroke-dasharray:none;stroke-opacity:1" />
+  <line
+     id="w23_s3-4"
+     x1="982.26599"
+     y1="1332.1398"
+     x2="982.26599"
+     y2="1297.2157"
+     stroke="#1c2430"
+     stroke-width="4.2"
+     style="stroke:#5a6472;stroke-width:3;stroke-dasharray:none;stroke-opacity:1" />
+  <line
+     id="w23_s3-8"
+     x1="981.75323"
+     y1="1264.7194"
+     x2="981.75323"
+     y2="936.12384"
+     stroke="#1c2430"
+     stroke-width="15.8061"
+     style="stroke:#5a6472;stroke-width:3;stroke-dasharray:none;stroke-opacity:1" />
+  <path
+     id="w23_hop3"
+     d="m 982.70206,1366.001 a 19.652043,18.201629 0 0 1 0,-36.4031"
+     fill="none"
+     stroke="#1c2430"
+     stroke-width="6.61952"
+     style="stroke:#5a6472;stroke-width:3;stroke-dasharray:none;stroke-opacity:1" />
+  <path
+     id="w23_hop3-6"
+     d="m 983.94615,1298.175 a 19.899876,16.069679 0 0 1 0,-32.1392"
+     fill="none"
+     stroke="#1c2430"
+     stroke-width="6.61952"
+     style="stroke:#5a6472;stroke-width:3;stroke-dasharray:none;stroke-opacity:1" />
+  <line
+     id="w24_s1"
+     x1="1800.7546"
+     y1="155.66046"
+     x2="1800.7546"
+     y2="202.87766"
+     stroke="#5a6472"
+     stroke-width="2.63934"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w24_s2"
+     x1="1800.1508"
+     y1="156.98366"
+     x2="608.42871"
+     y2="156.98366"
+     stroke="#5a6472"
+     stroke-width="2.63145"
+     style="stroke-width:3.00263;stroke-dasharray:none" />
+  <path
+     id="w24_hop2"
+     d="m 609.77174,159.09491 a 12,12 0 0 0 -24,0"
+     fill="none"
+     stroke="#5a6472"
+     stroke-width="2.6"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w24_s3"
+     x1="586.54462"
+     y1="157.15317"
+     x2="137.86517"
+     y2="157.15317"
+     stroke="#5a6472"
+     stroke-width="2.56088"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <text
+     x="8.5402966"
+     y="764.23651"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="15.5px"
+     font-weight="700"
+     fill="#1c2430"
+     id="text27"
+     style="font-size:20.8px;fill:#2b0000"><tspan
+       id="tspan14"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:25.6px;font-family:Arial;fill:#0000ff"><tspan
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:Arial;fill:#1a1a1a"
+         id="tspan20" /></tspan></text>
+  <text
+     x="199.30159"
+     y="1445.7369"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="15.5px"
+     font-weight="700"
+     fill="#1c2430"
+     id="text28"
+     style="font-size:20.8px"><tspan
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:25.6px;font-family:Arial;fill:#2b0000"
+       id="tspan147"><tspan
+   style="font-weight:bold"
+   id="tspan11"><tspan
+   style="font-size:32px;fill:#800000"
+   id="tspan10">★Cycle ends:</tspan><tspan
+   style="font-weight:normal"
+   id="tspan15"> PC always updates on the next rising clock edge. Register File write-back occurs only when RegWrite=1 (WD3 = ALU Result for R-type/addi, ReadData for lw); Data Memory write occurs only when MemWrite=1</tspan> (</tspan>sw).</tspan></text>
+  <line
+     x1="877.81024"
+     y1="313.63297"
+     x2="877.81024"
+     y2="351.63297"
+     stroke="#b5471b"
+     stroke-width="2"
+     stroke-dasharray="7, 5"
+     marker-end="url(#arrC)"
+     id="line29"
+     style="stroke-width:3;stroke-dasharray:10.5, 7.5;stroke-dashoffset:0" />
+  <text
+     x="877.81024"
+     y="373.63297"
+     text-anchor="middle"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="15.5px"
+     fill="#8a3010"
+     font-style="italic"
+     id="text30"
+     style="font-size:16px"><tspan
+       style="font-weight:bold"
+       id="tspan98">RegDst</tspan></text>
+  <line
+     x1="978.52441"
+     y1="313.63297"
+     x2="978.52441"
+     y2="351.63297"
+     stroke="#b5471b"
+     stroke-width="2"
+     stroke-dasharray="7, 5"
+     marker-end="url(#arrC)"
+     id="line30"
+     style="stroke-width:3;stroke-dasharray:10.5, 7.5;stroke-dashoffset:0" />
+  <text
+     x="978.52441"
+     y="373.63297"
+     text-anchor="middle"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="15.5px"
+     fill="#8a3010"
+     font-style="italic"
+     id="text31"
+     style="font-size:16px"><tspan
+       style="font-weight:bold"
+       id="tspan99">ALUSrc</tspan></text>
+  <line
+     x1="1079.2388"
+     y1="313.63297"
+     x2="1079.2388"
+     y2="351.63297"
+     stroke="#b5471b"
+     stroke-width="2"
+     stroke-dasharray="7, 5"
+     marker-end="url(#arrC)"
+     id="line31"
+     style="stroke-width:3;stroke-dasharray:10.5, 7.5;stroke-dashoffset:0" />
+  <text
+     x="1079.2388"
+     y="373.63297"
+     text-anchor="middle"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="15.5px"
+     fill="#8a3010"
+     font-style="italic"
+     id="text32"
+     style="font-size:16px"><tspan
+       style="font-weight:bold"
+       id="tspan100">MemToReg</tspan></text>
+  <line
+     x1="1179.9531"
+     y1="313.63297"
+     x2="1179.9531"
+     y2="351.63297"
+     stroke="#b5471b"
+     stroke-width="2"
+     stroke-dasharray="7, 5"
+     marker-end="url(#arrC)"
+     id="line32"
+     style="stroke-width:3;stroke-dasharray:10.5, 7.5;stroke-dashoffset:0" />
+  <text
+     x="1179.9531"
+     y="373.63297"
+     text-anchor="middle"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="15.5px"
+     fill="#8a3010"
+     font-style="italic"
+     id="text33"
+     style="font-size:16px"><tspan
+       style="font-weight:bold"
+       id="tspan101">RegWrite</tspan></text>
+  <line
+     x1="1280.6675"
+     y1="313.63297"
+     x2="1280.6675"
+     y2="351.63297"
+     stroke="#b5471b"
+     stroke-width="2"
+     stroke-dasharray="7, 5"
+     marker-end="url(#arrC)"
+     id="line33"
+     style="stroke-width:3;stroke-dasharray:10.5, 7.5;stroke-dashoffset:0" />
+  <text
+     x="1280.6675"
+     y="373.63297"
+     text-anchor="middle"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="15.5px"
+     fill="#8a3010"
+     font-style="italic"
+     id="text34"
+     style="font-size:16px"><tspan
+       style="font-weight:bold"
+       id="tspan102">MemRead</tspan></text>
+  <line
+     x1="1381.3817"
+     y1="313.63297"
+     x2="1381.3817"
+     y2="351.63297"
+     stroke="#b5471b"
+     stroke-width="2"
+     stroke-dasharray="7, 5"
+     marker-end="url(#arrC)"
+     id="line34"
+     style="stroke-width:3;stroke-dasharray:10.5, 7.5;stroke-dashoffset:0" />
+  <text
+     x="1381.3817"
+     y="373.63297"
+     text-anchor="middle"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="15.5px"
+     fill="#8a3010"
+     font-style="italic"
+     id="text35"
+     style="font-size:16px"><tspan
+       style="font-weight:bold"
+       id="tspan103">MemWrite</tspan></text>
+  <line
+     x1="1482.0961"
+     y1="313.63297"
+     x2="1482.0961"
+     y2="351.63297"
+     stroke="#b5471b"
+     stroke-width="2"
+     stroke-dasharray="7, 5"
+     marker-end="url(#arrC)"
+     id="line35"
+     style="stroke-width:3;stroke-dasharray:10.5, 7.5;stroke-dashoffset:0" />
+  <line
+     x1="1582.8103"
+     y1="313.63297"
+     x2="1582.8103"
+     y2="351.63297"
+     stroke="#b5471b"
+     stroke-width="2"
+     stroke-dasharray="7, 5"
+     marker-end="url(#arrC)"
+     id="line36"
+     style="stroke-width:3;stroke-dasharray:10.5, 7.5;stroke-dashoffset:0" />
+  <text
+     x="1582.8103"
+     y="373.63297"
+     text-anchor="middle"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="15.5px"
+     fill="#8a3010"
+     font-style="italic"
+     id="text37"
+     style="font-size:16px"><tspan
+       style="font-weight:bold"
+       id="tspan105">ALUOp</tspan></text>
+  <text
+     x="819.23621"
+     y="937.06134"
+     text-anchor="start"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="15.5px"
+     fill="#8a3010"
+     font-style="italic"
+     id="text38"
+     style="font-size:19.2px"><tspan
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:19.2px;font-family:'Segoe UI', Arial, sans-serif;"
+       id="tspan107">select 🡸 RegDst</tspan></text>
+  <text
+     x="1570.478"
+     y="916.82294"
+     text-anchor="start"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="15.5px"
+     fill="#8a3010"
+     font-style="italic"
+     id="text39"
+     style="font-size:19.2px"><tspan
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:19.2px;font-family:'Segoe UI', Arial, sans-serif;"
+       id="tspan113">select 🡸 ALUSrc</tspan></text>
+  <text
+     x="2662.5828"
+     y="781.60242"
+     text-anchor="start"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="15.5px"
+     fill="#8a3010"
+     font-style="italic"
+     id="text40"
+     style="font-size:19.2px"><tspan
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:19.2px;font-family:'Segoe UI', Arial, sans-serif;"
+       id="tspan115">select 🡸 MemToReg</tspan></text>
+  <text
+     x="1113.8669"
+     y="882.09857"
+     text-anchor="start"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="15.5px"
+     fill="#8a3010"
+     font-style="italic"
+     id="text41"
+     style="font-size:19.2px"><tspan
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:19.2px;font-family:'Segoe UI', Arial, sans-serif;"
+       id="tspan106">(RegWrite)</tspan></text>
+  <text
+     x="2289.624"
+     y="785.73151"
+     text-anchor="start"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="15.5px"
+     fill="#8a3010"
+     font-style="italic"
+     id="text42"
+     style="font-size:19.2px"><tspan
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:19.2px;font-family:'Segoe UI', Arial, sans-serif;"
+       id="tspan114">MemRead / MemWrite &lt;- CU</tspan></text>
+  <text
+     x="607.37915"
+     y="583.72058"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#1c2430"
+     font-weight="700"
+     id="text45"
+     style="font-size:25.6px">op</text>
+  <text
+     x="647.65997"
+     y="593.18616"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="13px"
+     fill="#3d4552"
+     font-weight="600"
+     id="text46"
+     style="font-size:22.4px"><tspan
+       style="font-weight:normal;font-size:22.4px;fill:#0000ff"
+       id="tspan87">Instr[31:26]</tspan></text>
+  <text
+     x="613.66565"
+     y="645.92773"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#1c2430"
+     font-weight="700"
+     id="text47"
+     style="font-size:25.6px">rs</text>
+  <text
+     x="647.28528"
+     y="655.28638"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="13px"
+     fill="#3d4552"
+     font-weight="600"
+     id="text48"
+     style="font-size:22.4px;fill:#0000ff"><tspan
+       style="font-weight:normal;font-size:22.4px"
+       id="tspan88">Instr[25:21]</tspan></text>
+  <text
+     x="610.052"
+     y="708.01202"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#1c2430"
+     font-weight="700"
+     id="text49"
+     style="font-size:25.6px">rt</text>
+  <text
+     x="650.04816"
+     y="717.10065"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="13px"
+     fill="#3d4552"
+     font-weight="600"
+     id="text50"
+     style="font-size:22.4px;fill:#0000ff"><tspan
+       style="font-weight:normal;font-size:22.4px"
+       id="tspan89">Instr[20:16]</tspan></text>
+  <text
+     x="610.698"
+     y="766.85382"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#1c2430"
+     font-weight="700"
+     id="text51"
+     style="font-size:25.6px">rd</text>
+  <text
+     x="649.62299"
+     y="778.43524"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="13"
+     fill="#3d4552"
+     font-weight="600"
+     id="text52"
+     style="font-size:22.4px;fill:#0000ff"><tspan
+       style="font-weight:normal;font-size:22.4px"
+       id="tspan90">Instr[15:11]</tspan></text>
+  <text
+     x="606.32654"
+     y="837.70703"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#1c2430"
+     font-weight="700"
+     id="text53"
+     style="font-size:25.6px">funct</text>
+  <text
+     x="780.11707"
+     y="1265.5753"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="13px"
+     fill="#3d4552"
+     font-weight="600"
+     id="text54"
+     style="font-size:22.4px;fill:#0000ff"><tspan
+       style="font-weight:normal;font-size:22.4px"
+       id="tspan91">Instr[5:0]</tspan></text>
+  <text
+     x="606.00519"
+     y="897.02161"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#1c2430"
+     font-weight="700"
+     id="text55"
+     style="font-size:25.6px">i<tspan
+   id="tspan146"
+   style="font-size:25.6px">m</tspan>m</text>
+  <text
+     x="787.29675"
+     y="1169.3077"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="13px"
+     fill="#3d4552"
+     font-weight="600"
+     id="text56"
+     style="font-size:20.8px;fill:#0000ff"><tspan
+       style="font-weight:normal;font-size:20.8px"
+       id="tspan92">Instr[15:0]</tspan></text>
+  <text
+     x="763.52728"
+     y="299.2597"
+     text-anchor="start"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text57"
+     style="font-size:25.6px"><tspan
+       style="font-weight:bold;font-size:25.6px;fill:#2b0000"
+       id="tspan143">opcode</tspan></text>
+  <text
+     x="1056.8691"
+     y="669.76099"
+     text-anchor="start"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text58"
+     style="font-size:25.6px;fill:#0000ff">A1 (<tspan
+   style="font-weight:bold;font-size:25.6px;fill:#2b0000"
+   id="tspan144">rs)</tspan></text>
+  <text
+     x="1056.4923"
+     y="730.32617"
+     text-anchor="start"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text59"
+     style="font-size:25.6px;fill:#0000ff">A2 (<tspan
+   style="font-weight:bold;font-size:25.6px;fill:#2b0000"
+   id="tspan145">rt)</tspan></text>
+  <text
+     x="1057.4082"
+     y="826.367"
+     text-anchor="start"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text60"
+     style="font-size:25.6px;fill:#0000ff">A3 (WriteReg)</text>
+  <text
+     x="1375.4124"
+     y="592.40332"
+     text-anchor="end"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text61"
+     style="font-size:25.6px;fill:#0000ff">RD1</text>
+  <text
+     x="1372.0225"
+     y="743.22589"
+     text-anchor="end"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text62"
+     style="font-size:25.6px;fill:#0000ff">RD2</text>
+  <text
+     x="1056.9795"
+     y="945.80444"
+     text-anchor="start"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16"
+     fill="#454f5e"
+     id="text63"
+     style="font-size:25.6px;fill:#0000ff">WD3 (WriteData)</text>
+  <text
+     x="1055.2391"
+     y="884.68652"
+     text-anchor="start"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16"
+     fill="#454f5e"
+     id="text63-3"
+     style="font-size:25.6px;fill:#0000ff">WE3</text>
+  <text
+     x="1058.2577"
+     y="1197.2043"
+     text-anchor="start"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text66"
+     style="font-size:25.6px"><tspan
+       style="font-weight:bold;font-size:25.6px;fill:#2b0000"
+       id="tspan142">imm</tspan></text>
+  <text
+     x="1441.0638"
+     y="1193.766"
+     text-anchor="end"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text67"
+     style="font-size:25.6px"><tspan
+       style="font-weight:bold;font-size:25.6px;fill:#800000"
+       id="tspan108">SignImm</tspan></text>
+  <text
+     x="1808.9747"
+     y="591.37964"
+     text-anchor="start"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text68"
+     style="font-size:25.6px;fill:#0000ff">SrcA (RD1)</text>
+  <text
+     x="1808.7723"
+     y="751.24536"
+     text-anchor="start"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text69"
+     style="font-size:25.6px;fill:#0000ff">SrcB</text>
+  <text
+     x="2121.3608"
+     y="586.36707"
+     text-anchor="end"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text70"
+     style="font-size:25.6px"><tspan
+       style="font-weight:bold;font-size:25.6px;fill:#800000"
+       id="tspan111">Result</tspan></text>
+  <text
+     x="2115.7605"
+     y="748.11688"
+     text-anchor="end"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text71"
+     style="font-size:25.6px;fill:#d45500"><tspan
+       style="font-weight:bold;font-size:25.6px;fill:#d45500"
+       id="tspan112">Zero</tspan></text>
+  <text
+     x="2317.5442"
+     y="593.57483"
+     text-anchor="start"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text72"
+     style="font-size:25.6px;text-align:center;text-anchor:middle;fill:#0000ff"><tspan
+       x="2317.5442"
+       y="593.57483"
+       id="tspan1">Address (EA)</tspan></text>
+  <text
+     x="2240.842"
+     y="692.92493"
+     text-anchor="start"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text73"
+     style="font-size:25.6px;fill:#0000ff">WriteData</text>
+  <text
+     x="2600.9863"
+     y="597.29211"
+     text-anchor="end"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text74"
+     style="font-size:25.6px;fill:#0000ff">ReadData</text>
+  <text
+     x="2826.6643"
+     y="501.36972"
+     text-anchor="end"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text74-6"
+     style="fill:#0000ff"><tspan
+       style="fill:#2b0000"
+       id="tspan118">input 0 (ALU Result)</tspan></text>
+  <text
+     x="2797.8845"
+     y="598.73969"
+     text-anchor="end"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text74-6-9"
+     style="fill:#0000ff"><tspan
+       style="fill:#2b0000"
+       id="tspan118-3">input 1 (ReadData)</tspan></text>
+  <text
+     x="1883.3961"
+     y="1204.2358"
+     text-anchor="start"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text75"
+     style="font-size:25.6px"><tspan
+       style="font-weight:bold;font-size:25.6px;fill:#2b0000"
+       id="tspan110">funct</tspan></text>
+  <text
+     x="2033.4709"
+     y="904.08466"
+     text-anchor="middle"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text76"
+     style="font-size:25.6px;fill:#0000ff">ALUControl</text>
+  <text
+     x="2007.4551"
+     y="285.263"
+     text-anchor="middle"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="14.5px"
+     fill="#454f5e"
+     id="text77"
+     style="font-size:22.4px;fill:#0000ff"><tspan
+       style="font-weight:bold;font-size:22.4px;fill:#916f6f"
+       id="tspan127">branch_target = (PC+4)+(SignImm &lt;&lt; 2)</tspan></text>
+  <rect
+     x="2398.3469"
+     y="25.0"
+     width="499.43228"
+     height="370.0"
+     rx="9.6664324"
+     fill="#ffffff"
+     stroke="#c7ccd4"
+     stroke-width="1.39319"
+     id="rect77" />
+  <line
+     x1="2427.9556"
+     y1="145.92683"
+     x2="2506.2668"
+     y2="145.92683"
+     stroke="#1c2430"
+     stroke-width="4.2"
+     marker-end="url(#arrBig-6)"
+     id="line79"
+     style="stroke:#5854e5;stroke-width:6;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#Triangle)" />
+  <text
+     x="2317.22"
+     y="60.71149"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="26.1449px"
+     font-weight="700"
+     fill="#1c2430"
+     id="text78"
+     transform="scale(1.0466671,0.95541362)"
+     style="stroke-width:1.4525">Legend</text>
+  <line
+     x1="2423.6389"
+     y1="96.10552"
+     x2="2519.4165"
+     y2="96.10552"
+     stroke="#5a6472"
+     stroke-width="3.48599"
+     marker-end="url(#arrD)"
+     id="line78"
+     style="stroke-width:5;stroke-dasharray:none" />
+  <text
+     x="2428.8367"
+     y="104.30443"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="22.5137px"
+     fill="#333c46"
+     id="text79"
+     transform="scale(1.0466671,0.95541362)"
+     style="stroke-width:1.4525">Data wire</text>
+  <text
+     x="2427.2371"
+     y="159.01137"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="22.5137px"
+     fill="#333c46"
+     id="text80"
+     transform="scale(1.0466671,0.95541362)"
+     style="stroke-width:1.4525"><tspan
+       style="font-weight:bold;fill:#0000ff"
+       id="tspan21">CPU Cycle start</tspan></text>
+  <line
+     x1="2425.3137"
+     y1="200.64794"
+     x2="2511.4268"
+     y2="200.64794"
+     stroke="#b5471b"
+     stroke-width="2.90499"
+     stroke-dasharray="7, 5"
+     marker-end="url(#arrC)"
+     id="line80"
+     style="stroke-width:5;stroke-dasharray:12.0482, 8.60588;stroke-dashoffset:0" />
+  <text
+     x="2427.2368"
+     y="217.33675"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="22.5137px"
+     fill="#333c46"
+     id="text81"
+     transform="scale(1.0466671,0.95541362)"
+     style="stroke-width:1.4525">Control signal</text>
+  <path
+     d="m 2425.3338,252.97646 h 39.5272 a 13.68255,12.48964 0 0 1 27.3651,0 h 28.8853"
+     fill="none"
+     stroke="#5a6472"
+     stroke-width="3.48599"
+     id="path81"
+     style="stroke-width:5;stroke-dasharray:none" />
+  <text
+     x="2427.2756"
+     y="266.74285"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="22.5137px"
+     fill="#333c46"
+     id="text82"
+     transform="scale(1.0466671,0.95541362)"
+     style="stroke-width:1.4525">Crossing wires (not connected)</text>
+  <rect x="2429" y="286.4" width="62" height="38" rx="6" fill="#eaf2ea" stroke="#2c3e63" stroke-width="1.6" id="lgnd_unused_box" />
+  <line x1="2429" y1="286.4" x2="2491" y2="324.4" stroke="#9aa3ad" stroke-width="3" id="lgnd_unused_x1" />
+  <line x1="2429" y1="324.4" x2="2491" y2="286.4" stroke="#9aa3ad" stroke-width="3" id="lgnd_unused_x2" />
+  <text x="2427.2756" y="323.31" font-family="'Segoe UI', Arial, sans-serif" font-size="22.5137px" fill="#333c46" id="lgnd_unused_txt" transform="scale(1.0466671,0.95541362)" style="stroke-width:1.4525">Unused by this instruction</text>
+  <rect x="2429" y="338.8" width="62" height="38" rx="7" fill="#fff3c4" stroke="#e3c04f" stroke-width="1.6" id="lgnd_value_box" />
+  <text x="2460" y="365.8" text-anchor="middle" font-family="'Segoe UI', Arial, sans-serif" font-size="22px" font-weight="700" fill="#c2410c" id="lgnd_value_num">14</text>
+  <text x="2427.2756" y="378.16" font-family="'Segoe UI', Arial, sans-serif" font-size="22.5137px" fill="#333c46" id="lgnd_value_txt" transform="scale(1.0466671,0.95541362)" style="stroke-width:1.4525">Value in the current step</text>
+  <line
+     id="w0_s1-6-37"
+     x1="199.48521"
+     y1="668.69183"
+     x2="391.63071"
+     y2="668.69183"
+     stroke="#1c2430"
+     stroke-width="4.2"
+     marker-end="url(#arrBig-0-1)"
+     style="stroke:#0700ff;stroke-width:6;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#Triangle)" />
+  <circle
+     cx="326.90601"
+     cy="666.42767"
+     fill="#1B2A4A"
+     style="color:#000000;font-weight:400;font-size:16px;font-family:Calibri, sans-serif;dominant-baseline:auto;text-anchor:start;fill:#1b2a4a;stroke:none;stroke-width:1.96983px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="circle95"
+     r="7.8793101" />
+  <line
+     id="w2_s3-3"
+     x1="2220.5171"
+     y1="125.49426"
+     x2="2220.5171"
+     y2="197.88902"
+     stroke="#5a6472"
+     stroke-width="2.67731"
+     marker-end="url(#arrD-3)"
+     style="stroke-width:3;stroke-dasharray:none;marker-end:url(#arrD-3)" />
+  <text
+     x="1680.6532"
+     y="859.77887"
+     text-anchor="end"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text74-6-1"
+     style="fill:#0000ff"><tspan
+       style="fill:#2b0000"
+       id="tspan118-5">input 1 (SignImm)</tspan></text>
+  <text
+     x="900.80676"
+     y="776.00299"
+     text-anchor="end"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text74-6-3-2"
+     style="fill:#0000ff"><tspan
+       style="fill:#2b0000"
+       id="tspan118-2-0">input 0 (rt)</tspan></text>
+  <text
+     x="902.40729"
+     y="890.03619"
+     text-anchor="end"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text74-6-3-2-0"
+     style="fill:#0000ff"><tspan
+       style="fill:#2b0000"
+       id="tspan118-2-0-5">input 1 (rd)</tspan></text>
+  <text
+     x="140.22675"
+     y="255.84735"
+     text-anchor="end"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text74-6-3-6"
+     style="text-align:center;text-anchor:middle;fill:#0000ff"><tspan
+       id="tspan5"
+       x="140.22675"
+       y="255.84735"><tspan
+         style="text-align:center;text-anchor:middle;fill:#2b0000"
+         id="tspan118-2-1">input 1</tspan></tspan><tspan
+       id="tspan6"
+       x="140.22675"
+       y="275.84735"><tspan
+         style="text-align:center;text-anchor:middle;fill:#2b0000"
+         id="tspan7">(BranchTarget)</tspan></tspan></text>
+  <text
+     x="132.49905"
+     y="340.25174"
+     text-anchor="end"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text74-6-3-6-1"
+     style="fill:#0000ff"><tspan
+       id="tspan3"
+       x="132.49905"
+       y="340.25174"
+       style="fill:#2b0000">input 0</tspan><tspan
+       x="132.49905"
+       y="360.25174"
+       style="fill:#2b0000"
+       id="tspan4">(PC+4)</tspan></text>
+  <path
+     id="w17_hop4-6"
+     d="m 285.5253,679.65187 a 12,12 0 0 1 0,-24"
+     fill="none"
+     stroke="#5a6472"
+     stroke-width="2.6"
+     style="stroke:#5a6472;stroke-width:3;stroke-dasharray:none;stroke-opacity:1" />
+  <text
+     x="611.42175"
+     y="327.65735"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="15.5px"
+     font-weight="700"
+     fill="#1c2430"
+     id="text27-4"
+     style="font-size:20.8px;text-align:center;text-anchor:middle;fill:#2b0000"><tspan
+       id="tspan2"
+       x="611.42175"
+       y="327.65735"><tspan
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:Georgia;text-align:center;text-anchor:middle"
+         id="tspan141-2">Cycle ends: PC updated</tspan></tspan><tspan
+       id="tspan8"
+       x="611.42175"
+       y="353.68784"><tspan
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:Georgia;text-align:center;text-anchor:middle"
+         id="tspan9">on the next rising clock edge</tspan></tspan></text>
+  <text
+     x="1469.3684"
+     y="1336.6736"
+     text-anchor="end"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text71-4"
+     style="font-size:25.6px;fill:#d45500"><tspan
+       style="font-weight:bold;font-size:25.6px;fill:#d45500"
+       id="tspan112-3">Zero</tspan></text>
+  <line
+     id="w7_s3-56"
+     x1="1571.9066"
+     y1="1286.9752"
+     x2="1604.2496"
+     y2="1286.9752"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-10)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-10)" />
+  <line
+     id="w7_s3-56-8"
+     x1="798.02039"
+     y1="1286.8412"
+     x2="830.3634"
+     y2="1286.8412"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-10-9)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-10-9)" />
+  <line
+     id="w7_s3-0"
+     x1="599.69995"
+     y1="854.71863"
+     x2="632.04297"
+     y2="854.71863"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-74)"
+     style="stroke-width:2;stroke-dasharray:none;marker-end:url(#arrD-74)" />
+  <line
+     id="w7_s3-0-9"
+     x1="1385.5121"
+     y1="583.71655"
+     x2="1407.7681"
+     y2="583.71655"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-74-9)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-74-9)" />
+  <line
+     id="w7_s3-0-9-2"
+     x1="1500.4922"
+     y1="945.69922"
+     x2="1500.4922"
+     y2="913.3562"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-74-9-1)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-74-9-1)" />
+  <line
+     id="w7_s3-0-9-2-5"
+     x1="1499.8804"
+     y1="670.43896"
+     x2="1499.8804"
+     y2="638.09595"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-74-9-1-2)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-74-9-1-2)" />
+  <line
+     id="w7_s3-0-9-20"
+     x1="1466.2056"
+     y1="1185.0631"
+     x2="1480.2084"
+     y2="1185.0631"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-74-9-35)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-74-9-35)" />
+  <line
+     id="w7_s3-0-9-20-0"
+     x1="1399.7379"
+     y1="735.66705"
+     x2="1413.7407"
+     y2="735.66705"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-74-9-35-9)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-74-9-35-9)" />
+  <line
+     id="w7_s3-0-9-20-9"
+     x1="2153.2847"
+     y1="550.88379"
+     x2="2153.2847"
+     y2="525.76758"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-74-9-35-8)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-74-9-35-8)" />
+  <line
+     id="w7_s3-0-9-20-5"
+     x1="2478.2039"
+     y1="418.27866"
+     x2="2492.2065"
+     y2="418.27866"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-74-9-35-6)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-74-9-35-6)" />
+  <line
+     id="w7_s3-0-96"
+     x1="600.71844"
+     y1="913.4375"
+     x2="633.06146"
+     y2="913.4375"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-74-2)"
+     style="stroke-width:2;stroke-dasharray:none;marker-end:url(#arrD-74-2)" />
+  <line
+     id="w7_s3-0-484"
+     x1="600.04852"
+     y1="664.64142"
+     x2="632.39154"
+     y2="664.64142"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-74-97)"
+     style="stroke-width:2;stroke-dasharray:none;marker-end:url(#arrD-74-97)" />
+  <line
+     id="w7_s3-0-6"
+     x1="599.70874"
+     y1="602.14624"
+     x2="632.05176"
+     y2="602.14624"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-74-8)"
+     style="stroke-width:2;stroke-dasharray:none;marker-end:url(#arrD-74-8)" />
+  <line
+     id="w7_s3-5-1"
+     x1="326.28223"
+     y1="659.87549"
+     x2="326.28223"
+     y2="616.67413"
+     stroke="#5a6472"
+     stroke-width="1.56622"
+     marker-end="url(#arrD-1-8)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-1-8)" />
+  <line
+     id="w7_s3-5-8"
+     x1="607.96185"
+     y1="124.18579"
+     x2="651.16321"
+     y2="124.18579"
+     stroke="#5a6472"
+     stroke-width="1.56622"
+     marker-end="url(#arrD-1-46)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-1-46)" />
+  <line
+     id="w7_s3-5-88-0"
+     x1="1052.8512"
+     y1="157.28912"
+     x2="1009.6499"
+     y2="157.28912"
+     stroke="#5a6472"
+     stroke-width="1.56622"
+     marker-end="url(#arrD-1-49-8)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-1-49-8)" />
+  <line
+     id="w7_s3-5-88-1"
+     x1="1800.1062"
+     y1="202.26482"
+     x2="1800.1062"
+     y2="172.00021"
+     stroke="#5a6472"
+     stroke-width="1.56622"
+     marker-end="url(#arrD-1-49-0)"
+     style="stroke-width:2.50777;stroke-dasharray:none;marker-end:url(#arrD-1-49-0)" />
+  <line
+     id="w8_s2-9"
+     x1="597.5611"
+     y1="125.12096"
+     x2="597.5611"
+     y2="223.58362"
+     stroke="#5a6472"
+     stroke-width="1.85336"
+     style="stroke-width:3;stroke-dasharray:none" />
+  <line
+     id="w7_s3-5-88-1-4"
+     x1="597.297"
+     y1="207.95012"
+     x2="597.297"
+     y2="184.70457"
+     stroke="#5a6472"
+     stroke-width="1.56622"
+     marker-end="url(#arrD-1-49-0-1)"
+     style="stroke-width:2.8;stroke-dasharray:none;marker-end:url(#arrD-1-49-0-1)" />
+  <line
+     id="w7_s3-0-9-2-2"
+     x1="1434.8412"
+     y1="722.83118"
+     x2="1434.8412"
+     y2="690.48804"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-74-9-1-4)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-74-9-1-4)" />
+  <line
+     id="w7_s3-0-9-2-2-0"
+     x1="700.46857"
+     y1="1041.5685"
+     x2="700.46857"
+     y2="1073.9116"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-74-9-1-4-3)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-74-9-1-4-3)" />
+  <line
+     id="w7_s3-0-9-2-2-0-3"
+     x1="652.50787"
+     y1="1041.9608"
+     x2="652.50787"
+     y2="1074.304"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-74-9-1-4-3-5)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-74-9-1-4-3-5)" />
+  <text
+     x="1484.0852"
+     y="372.78549"
+     text-anchor="middle"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="15.5px"
+     fill="#8a3010"
+     font-style="italic"
+     id="text36"
+     style="font-size:16px"><tspan
+       style="font-weight:bold"
+       id="tspan104">Branch</tspan></text>
+  <path
+     d="m 309.64608,427.95114 v -44.52423 h -23.31033 q -23.31035,0 -23.31035,22.26212 0,22.26211 23.31035,22.26211 z"
+     fill="#e8f4f7"
+     stroke="#1b2a4a"
+     stroke-width="1.03977"
+     id="path2-20" />
+  <text
+     x="273.21558"
+     y="458.87592"
+     text-anchor="end"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text70-6"
+     style="font-size:14.6189px;fill:#2b0000;stroke-width:0.571049"
+     transform="scale(1.1141725,0.89752709)"><tspan
+       style="font-weight:bold;font-size:14.6189px;fill:#2b0000;stroke-width:0.571049"
+       id="tspan111-2">AND</tspan></text>
+  <line
+     id="w7_s3-0-9-20-0-6"
+     x1="261.91238"
+     y1="407.09415"
+     x2="207.18549"
+     y2="407.09415"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-74-9-35-9-9)"
+     style="stroke-width:3;stroke-dasharray:none;marker-end:url(#arrD-74-9-35-9-9)" />
+  <text
+     x="373.98813"
+     y="392.13031"
+     text-anchor="middle"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="15.5px"
+     fill="#8a3010"
+     font-style="italic"
+     id="text36-5"
+     style="font-size:19.2px"><tspan
+       style="font-weight:bold;font-size:19.2px"
+       id="tspan104-7">Branch</tspan></text>
+  <line
+     id="w7_s3-0-9-2-5-3"
+     x1="1500.3563"
+     y1="465.73801"
+     x2="1500.3563"
+     y2="433.39499"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-74-9-1-2-7)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-74-9-1-2-7)" />
+  <text
+     x="401.52026"
+     y="298.08701"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#1c2430"
+     font-weight="700"
+     id="text45-0"
+     style="font-size:25.6px">PC</text>
+  <text
+     x="365.27203"
+     y="722.47925"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#1c2430"
+     font-weight="700"
+     id="text45-0-3"
+     style="font-size:25.6px">PC</text>
+  <text
+     x="210.41037"
+     y="388.95035"
+     text-anchor="start"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="15.5px"
+     fill="#8a3010"
+     font-style="italic"
+     id="text38-9"
+     style="font-size:19.2px"><tspan
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:19.2px;font-family:'Segoe UI', Arial, sans-serif;"
+       id="tspan107-9">PCSrc</tspan></text>
+  <text
+     x="-304.91641"
+     y="1679.5594"
+     text-anchor="end"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text67-6"
+     style="font-size:19.2px"
+     transform="rotate(-90)"><tspan
+       style="font-weight:bold;font-size:19.2px;fill:#800000"
+       id="tspan108-5">SignImm</tspan></text>
+  <text
+     x="2029.5769"
+     y="475.32669"
+     text-anchor="end"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text62-6"
+     style="font-size:25.6px;fill:#0000ff">RD2</text>
+  <text
+     x="2837.2598"
+     y="444.42194"
+     text-anchor="end"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text70-3"
+     style="font-size:25.6px"><tspan
+       style="font-weight:bold;font-size:25.6px;fill:#800000"
+       id="tspan111-3">Result</tspan></text>
+  <text
+     x="2272.072"
+     y="163.8112"
+     text-anchor="middle"
+     dominant-baseline="central"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="27px"
+     font-weight="700"
+     fill="#1c2430"
+     id="text7-7"
+     style="font-size:25.6px">PC + 4</text>
+  <text
+     x="-262.75287"
+     y="48.079784"
+     text-anchor="middle"
+     dominant-baseline="central"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="27px"
+     font-weight="700"
+     fill="#1c2430"
+     id="text7-7-7"
+     style="font-size:25.6px"
+     transform="rotate(-90)">PC + 4</text>
+  <text
+     x="227.5119"
+     y="181.28094"
+     text-anchor="middle"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="14.5px"
+     fill="#454f5e"
+     id="text77-0"
+     style="font-size:20.8px;fill:#0000ff"><tspan
+       style="font-weight:bold;font-size:20.8px;fill:#916f6f"
+       id="tspan127-1">branch_target</tspan></text>
+  
+  <text
+     x="1948.5056"
+     y="1385.5769"
+     text-anchor="start"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text73-5"
+     style="font-size:25.6px;fill:#0000ff">WD3</text>
+  <text
+     x="2900.0715"
+     y="578.25726"
+     text-anchor="start"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text73-8"
+     style="font-size:25.6px;fill:#0000ff">WD3</text>
+  <line
+     id="w7_s3-56-8-8"
+     x1="833.02173"
+     y1="1346.0442"
+     x2="800.67871"
+     y2="1346.0442"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-10-9-4)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-10-9-4)" />
+  <line
+     id="w7_s3-56-8-86"
+     x1="1767.2429"
+     y1="1345.9"
+     x2="1734.8999"
+     y2="1345.9"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-10-9-3)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-10-9-3)" />
+  <line
+     id="w7_s3-56-8-86-5"
+     x1="1904.6923"
+     y1="1398.9"
+     x2="1872.3492"
+     y2="1398.9"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-10-9-3-6)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-10-9-3-6)" />
+  <line
+     id="w7_s3-56-8-84"
+     x1="2187.1631"
+     y1="1051.7786"
+     x2="2187.1631"
+     y2="1084.1216"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-10-9-9)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-10-9-9)" />
+  <line
+     id="w7_s3-56-8-5"
+     x1="2141"
+     y1="742.85828"
+     x2="2173.343"
+     y2="742.85828"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-10-9-5)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-10-9-5)" />
+  <line
+     id="w7_s3-56-8-5-2"
+     x1="283.16309"
+     y1="957.06317"
+     x2="283.16309"
+     y2="924.72015"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-10-9-5-0)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-10-9-5-0)" />
+  <line
+     id="w10_s2-6-5"
+     x1="284.84964"
+     y1="427.33334"
+     x2="284.81705"
+     y2="655.02032"
+     stroke="#5a6472"
+     stroke-width="4.58686"
+     style="stroke:#5a6472;stroke-width:3;stroke-dasharray:none;stroke-opacity:1" />
+  <line
+     id="w4_s2-4"
+     x1="285.21332"
+     y1="504.42801"
+     x2="285.21332"
+     y2="428.73816"
+     stroke="#5a6472"
+     stroke-width="2.49717"
+     marker-end="url(#arrD-14)"
+     style="stroke-width:3;stroke-dasharray:none;marker-end:url(#arrD-14)" />
+  <text
+     x="-464.27914"
+     y="271.07916"
+     text-anchor="end"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="16px"
+     fill="#454f5e"
+     id="text71-4-5"
+     style="font-size:25.6px;fill:#d45500"
+     transform="rotate(-90)"><tspan
+       style="font-weight:bold;font-size:25.6px;fill:#d45500"
+       id="tspan112-3-5">Zero</tspan></text>
+  <line
+     id="w7_s3-0-9-20-0-6-3"
+     x1="364.03235"
+     y1="408.13641"
+     x2="309.30545"
+     y2="408.13641"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-74-9-35-9-9-7)"
+     style="stroke-width:3;stroke-dasharray:none;marker-end:url(#arrD-74-9-35-9-9-7)" />
+  <text
+     x="1527.4084"
+     y="52.436459"
+     text-anchor="middle"
+     dominant-baseline="central"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="27"
+     font-weight="700"
+     fill="#1c2430"
+     id="text10-1"
+     style="font-size:51.2px"><tspan
+       id="tspan12"
+       x="1527.4084"
+       y="52.436459">Single-Cycle MIPS Datapath — <tspan
+   style="fill:#0000ff"
+   id="tspan30">Reference Diagram</tspan></tspan></text>
+  <text
+     x="13.604766"
+     y="762.28156"
+     font-family="'Segoe UI', Arial, sans-serif"
+     font-size="15.5px"
+     font-weight="700"
+     fill="#1c2430"
+     id="text27-7"
+     style="font-size:20.8px;fill:#2b0000"><tspan
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:Arial;"
+       id="tspan141"><tspan
+         style="font-weight:bold;font-size:25.6px"
+         id="tspan19">★</tspan><tspan
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:25.6px;font-family:Arial;fill:#0000ff"
+         id="tspan17">Cycle begins:</tspan><tspan
+         style="font-weight:bold;font-size:25.6px"
+         id="tspan16"> Fetch</tspan></tspan></text>
+  <text
+     xml:space="preserve"
+     style="font-size:25.6px;line-height:1.45;font-family:Arial;text-align:center;writing-mode:tb-rl;text-orientation:upright;text-anchor:middle;fill:#0000ff;fill-rule:evenodd;stroke:#e2873e;stroke-width:6"
+     x="1228.8136"
+     y="83.05085"
+     id="text29"><tspan
+       id="tspan13" /></text>
+  <line
+     id="w7_s3-56-8-86-6"
+     x1="2955.8716"
+     y1="1009.0703"
+     x2="2955.8716"
+     y2="1041.4132"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-10-9-3-1)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-10-9-3-1)" />
+  <line
+     id="w7_s3-56-8-5-3"
+     x1="2896.6887"
+     y1="600.88287"
+     x2="2929.0317"
+     y2="600.88287"
+     stroke="#5a6472"
+     stroke-width="1.90069"
+     marker-end="url(#arrD-10-9-5-2)"
+     style="stroke-width:2.5;stroke-dasharray:none;marker-end:url(#arrD-10-9-5-2)" />
+  <ellipse
+     cx="1434.2324"
+     cy="737.33075"
+     fill="#1B2A4A"
+     style="color:#000000;font-weight:400;font-size:16px;font-family:Calibri, sans-serif;dominant-baseline:auto;text-anchor:start;fill:#1b2a4a;stroke:none;stroke-width:1.26825px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="circle95-1-1"
+     rx="4.8620687"
+     ry="5.2931032" />
+  <ellipse
+     cx="783.01111"
+     cy="724.01294"
+     fill="#1B2A4A"
+     style="color:#000000;font-weight:400;font-size:16px;font-family:Calibri, sans-serif;dominant-baseline:auto;text-anchor:start;fill:#1b2a4a;stroke:none;stroke-width:1.26825px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="circle95-1"
+     rx="4.8620687"
+     ry="5.2931032" />
+  <ellipse
+     cx="1500.6028"
+     cy="853.79968"
+     fill="#1B2A4A"
+     style="color:#000000;font-weight:400;font-size:16px;font-family:Calibri, sans-serif;dominant-baseline:auto;text-anchor:start;fill:#1b2a4a;stroke:none;stroke-width:1.26825px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="circle95-1-2"
+     rx="4.8620687"
+     ry="5.2931032" />
+  <ellipse
+     cx="2152.4475"
+     cy="579.63452"
+     fill="#1B2A4A"
+     style="color:#000000;font-weight:400;font-size:16px;font-family:Calibri, sans-serif;dominant-baseline:auto;text-anchor:start;fill:#1b2a4a;stroke:none;stroke-width:1.26825px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="circle95-1-28"
+     rx="4.8620687"
+     ry="5.2931032" />
+  <ellipse
+     cx="597.561"
+     cy="124.513"
+     fill="#1B2A4A"
+     style="color:#000000;font-weight:400;font-size:16px;font-family:Calibri, sans-serif;dominant-baseline:auto;text-anchor:start;fill:#1b2a4a;stroke:none;stroke-width:1.26825px;stroke-linecap:butt;stroke-linejoin:miter"
+     id="dot_pc4_junction"
+     rx="4.8620687"
+     ry="5.2931032" />
+</svg>
+
+</div>
+
+<div class="controls">
+  <button id="btnPrev">&#9664; Previous step</button>
+  <button class="primary" id="btnNext">Next step &#9654;</button>
+  <button id="btnNextInstr">Next instruction &#9197;</button>
+  <button id="btnPlay">&#9654; Play</button>
+  <button id="btnPause">&#9208; Pause</button>
+  <label>Speed <input type="range" id="speed" min="1" max="7" value="3"> <span id="speedText"></span></label>
+  <button id="btnReset">&#8634; Reset</button>
+  <button class="focusBtn" id="btnFocus" title="Datapath view: only the Program panel, the signals and the diagram (Esc returns to the Full view)">&#x2922; Datapath view</button>
+  <span class="keys">Keys: Space/&#8594; next step &middot; &#8592; previous &middot; Enter next instruction &middot; R reset</span>
+</div>
+
+<div class="now" id="now"></div>
+</div>
+<div class="gutter r" id="gutR" title="Drag to resize the columns. Double-click to reset."></div>
+
+<div class="side right">
+  <div class="panel">
+    <h2>Current instruction</h2>
+    <div class="mono" id="ciText" style="font-size:16px;font-weight:700">&nbsp;</div>
+    <div class="note" id="ciMeta" style="margin:2px 0 6px">&nbsp;</div>
+    <div class="bits" id="ciBits"></div>
+    <h2 style="margin-top:10px">Control signals</h2>
+    <table class="sig" id="ciSig">
+      <tr><th>RegDst</th><th>ALUSrc</th><th>MemToReg</th><th>RegWrite</th><th>MemRead</th></tr>
+      <tr><td id="sRegDst"></td><td id="sALUSrc"></td><td id="sMemToReg"></td><td id="sRegWrite"></td><td id="sMemRead"></td></tr>
+      <tr><th>MemWrite</th><th>Branch</th><th>ALUOp</th><th colspan="2">ALUControl</th></tr>
+      <tr><td id="sMemWrite"></td><td id="sBranch"></td><td id="sALUOp"></td><td colspan="2" id="sALUControl"></td></tr>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h2>Values on the wires (this step)</h2>
+    <div class="scroll"><table id="wires"><tr><th>Wire</th><th>Value</th></tr></table></div>
+    <div class="two">
+      <div><h2>Registers used</h2>
+        <div class="scroll" id="regsWrap"><table id="regs"><tr><th>Reg</th><th>Value</th><th>Hex</th></tr></table></div>
+        <p class="note">All registers start at 0, except $sp = 0x7FFFEFFC and $gp = 0x10008000 (the MARS start values). Read-only.</p></div>
+      <div><h2>Memory used</h2>
+        <div class="scroll"><table id="mem"><tr><th>Address</th><th>Value</th><th>Hex</th></tr></table></div>
+        <p class="note">Every word the program has read or written. Changed cells are orange until the next instruction starts.</p></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<footer id="footer"></footer>
+
+<script>
+/* === CORE START === */
+/* Simulation core: assembler, machine state, per-step trace. No DOM access. Runs in the browser and in Node.js. */
+var CORE = (function(){
+"use strict";
+var VERSION = "2";
+var REG_NAMES = ["$zero","$at","$v0","$v1","$a0","$a1","$a2","$a3","$t0","$t1","$t2","$t3","$t4","$t5","$t6","$t7",
+  "$s0","$s1","$s2","$s3","$s4","$s5","$s6","$s7","$t8","$t9","$k0","$k1","$gp","$sp","$fp","$ra"];
+var TEXT_BASE = 0x00400000;
+var SP_START = 0x7FFFEFFC;
+var GP_START = 0x10008000;  /* as shown in the MARS Registers tab */
+
+/* Control signals and ALU codes from the chapter notes (topic "Control Signal Summary Table"). "X" = don't care. */
+var ISA = {
+  add:{type:"R",op:0,funct:32,ctl:{RegDst:1,ALUSrc:0,MemToReg:0,RegWrite:1,MemRead:0,MemWrite:0,Branch:0,ALUOp:"10",ALUControl:"010"},aluName:"add"},
+  sub:{type:"R",op:0,funct:34,ctl:{RegDst:1,ALUSrc:0,MemToReg:0,RegWrite:1,MemRead:0,MemWrite:0,Branch:0,ALUOp:"10",ALUControl:"110"},aluName:"sub"},
+  and:{type:"R",op:0,funct:36,ctl:{RegDst:1,ALUSrc:0,MemToReg:0,RegWrite:1,MemRead:0,MemWrite:0,Branch:0,ALUOp:"10",ALUControl:"000"},aluName:"and"},
+  or: {type:"R",op:0,funct:37,ctl:{RegDst:1,ALUSrc:0,MemToReg:0,RegWrite:1,MemRead:0,MemWrite:0,Branch:0,ALUOp:"10",ALUControl:"001"},aluName:"or"},
+  slt:{type:"R",op:0,funct:42,ctl:{RegDst:1,ALUSrc:0,MemToReg:0,RegWrite:1,MemRead:0,MemWrite:0,Branch:0,ALUOp:"10",ALUControl:"111"},aluName:"slt"},
+  addi:{type:"I",op:8, ctl:{RegDst:0,ALUSrc:1,MemToReg:0,RegWrite:1,MemRead:0,MemWrite:0,Branch:0,ALUOp:"00",ALUControl:"010"},aluName:"add"},
+  lw:  {type:"I",op:35,ctl:{RegDst:0,ALUSrc:1,MemToReg:1,RegWrite:1,MemRead:1,MemWrite:0,Branch:0,ALUOp:"00",ALUControl:"010"},aluName:"add"},
+  sw:  {type:"I",op:43,ctl:{RegDst:"X",ALUSrc:1,MemToReg:"X",RegWrite:0,MemRead:0,MemWrite:1,Branch:0,ALUOp:"00",ALUControl:"010"},aluName:"add"},
+  beq: {type:"I",op:4, ctl:{RegDst:"X",ALUSrc:0,MemToReg:"X",RegWrite:0,MemRead:0,MemWrite:0,Branch:1,ALUOp:"01",ALUControl:"110"},aluName:"sub"}
+};
+/* Steps each instruction uses (notes, topic "Instruction Execution Steps"). */
+var STEPS_USED = {R:[1,2,3,5], addi:[1,2,3,5], lw:[1,2,3,4,5], sw:[1,2,3,4], beq:[1,2,3]};
+var STEP_NAMES = {1:"Fetch (IF)",2:"Decode (ID)",3:"Execute (EX)",4:"Memory access (MEM)",5:"Write back (WB)"};
+
+function toU32(v){ return v >>> 0; }
+function toS32(v){ return v | 0; }
+function hex32(v){ return "0x" + toU32(v).toString(16).toUpperCase().padStart(8,"0"); }
+function hex16(v){ return "0x" + (v & 0xFFFF).toString(16).toUpperCase().padStart(4,"0"); }
+function bin(v,n){ return toU32(v).toString(2).padStart(n,"0").slice(-n); }
+function dec(v){ return String(toS32(v)); }
+function fmt(v){ return dec(v) + " (" + hex32(v) + ")"; }  /* value: decimal and hex */
+/* fmtShort: for labels on short wires; large values are shown in hex only so the label stays on the wire (the tables show both forms) */
+function fmtShort(v){ return (Math.abs(toS32(v)) < 10000000) ? fmt(v) : hex32(v); }
+function regName(n){ return REG_NAMES[n]; }
+function signExt16(imm){ return toS32((imm & 0xFFFF) << 16 >> 16); }
+
+function parseReg(tok){
+  if (typeof tok !== "string") return -1;
+  var t = tok.trim().toLowerCase();
+  var i = REG_NAMES.indexOf(t);
+  if (i >= 0) return i;
+  var m = /^\$(\d{1,2})$/.exec(t);
+  if (m) { var n = parseInt(m[1],10); if (n >= 0 && n <= 31) return n; }
+  return -1;
+}
+/* Parse an integer token: decimal or 0x hex. Returns null if invalid. Hex values up to 32 bits are allowed. */
+function parseInt32(tok){
+  if (typeof tok !== "string") return null;
+  var t = tok.trim();
+  var m = /^([+-]?)0[xX]([0-9a-fA-F]{1,8})$/.exec(t);
+  if (m) { var hv = parseInt(m[2],16); return m[1] === "-" ? -hv : hv; }
+  if (/^[+-]?0\d+$/.test(t)) return null;   /* 010 would be octal in MARS: rejected here, see assemble() */
+  if (/^[+-]?\d{1,10}$/.test(t)) { var dv = parseInt(t,10); if (dv >= -2147483648 && dv <= 4294967295) return dv; return null; }
+  return null;
+}
+function looksOctal(tok){ return /^[+-]?0\d+$/.test(String(tok).trim()); }
+/* A 16-bit field: decimal -32768..32767, or a hex pattern 0x0000..0xFFFF read as a signed 16-bit pattern. */
+/* HEX_IMM_AS_PATTERN: true  = a hex immediate such as 0xFFF1 is the 16-bit two's complement pattern (-15), the way the notes show the encoded field.
+                       false = 0xFFF1 is the unsigned number 65521, which does not fit in 16 bits signed, so Load reports an error (MARS would instead expand addi into three instructions). */
+var HEX_IMM_AS_PATTERN = true;
+function parseImm16(tok){
+  var t = tok.trim();
+  if (HEX_IMM_AS_PATTERN && /^0[xX][0-9a-fA-F]{1,4}$/.test(t)) return signExt16(parseInt(t.slice(2),16));
+  var v = parseInt32(t);
+  if (v === null) return null;
+  if (v < -32768 || v > 32767) return null;
+  return v;
+}
+
+/* assemble(text) -> {ok:true, lines:[entry], labels:{}} or {ok:false, line:n, msg:"..."} */
+function assemble(text){
+  var raw = String(text).replace(/\r\n?/g,"\n").split("\n");
+  var entries = [], labels = {}, addr = TEXT_BASE, pendingLabels = [];
+  var i, ln;
+  function fail(lineNo,msg){ return {ok:false, line:lineNo, msg:msg}; }
+  for (i = 0; i < raw.length; i++){
+    ln = i + 1;
+    var s = raw[i].replace(/#.*$/,"").trim();
+    if (s === "") continue;
+    /* characters MIPS assembly never uses on an instruction line; catching them here keeps the later messages truthful */
+    if (s.indexOf(";") >= 0) return fail(ln, "unexpected \";\" — MIPS comments start with \"#\", and instructions do not end with \";\"");
+    var badChar = /[^A-Za-z0-9_$.,():+\s-]/.exec(s);
+    if (badChar) return fail(ln, "unexpected character \"" + badChar[0] + "\"");
+    /* labels at the start of the line (one or more) */
+    var lm;
+    while ((lm = /^([A-Za-z_$.][A-Za-z0-9_$.]*)\s*:\s*/.exec(s)) !== null){
+      var name = lm[1];
+      if (labels.hasOwnProperty(name)) return fail(ln, "duplicate label \"" + name + "\"");
+      labels[name] = addr;
+      pendingLabels.push(name);
+      entries.push({line:ln, addr:addr, kind:"label", text:name + ":"});
+      s = s.slice(lm[0].length);
+    }
+    if (s === "") continue;
+    if (s.charAt(0) === "."){
+      var d = s.split(/\s+/)[0].toLowerCase();
+      if (d === ".text" || d === ".globl") continue;
+      return fail(ln, "directive " + d + " is not supported (only .text and .globl are accepted)");
+    }
+    var mm = /^([A-Za-z]+)\s*(.*)$/.exec(s);
+    if (!mm) return fail(ln, "cannot read this line");
+    var op = mm[1].toLowerCase();
+    var args = mm[2].trim() === "" ? [] : mm[2].trim().replace(/\s+\(/g, "(").split(",").map(function(a){ return a.trim(); });
+    if (args.length && args[args.length - 1] === "") return fail(ln, "the line ends after a comma; the last operand is missing");
+    for (var ai = 0; ai < args.length; ai++){
+      if (args[ai] === "") return fail(ln, "empty operand (two commas in a row?)");
+      if (/\s/.test(args[ai].replace(/\(\s*\$[A-Za-z0-9]+\s*\)/, ""))) return fail(ln, "operands must be separated by commas, and an operand may not contain spaces: \"" + args[ai] + "\"");
+    }
+    var e = {line:ln, addr:addr, kind:"instr", op:op, text:s};
+    if (op === "syscall"){
+      if (args.length !== 0) return fail(ln, "syscall takes no operands");
+      e.kind = "exit"; e.text = "syscall";
+      entries.push(e); addr += 4; continue;
+    }
+    if (op === "li"){
+      if (args.length !== 2) return fail(ln, "li needs 2 operands: li $reg, value");
+      var lr = parseReg(args[0]); if (lr < 0) return fail(ln, "unknown register \"" + args[0] + "\"");
+      if (looksOctal(args[1])) return fail(ln, "value \"" + args[1] + "\" has a leading zero (MARS would read it as octal); write it without the zero or in 0x hex");
+      var lv = parseInt32(args[1]); if (lv === null) return fail(ln, "bad value \"" + args[1] + "\" (decimal or 0x hex, 32 bits)");
+      e.kind = "setup"; e.rt = lr; e.imm = toS32(lv); e.text = "li " + regName(lr) + ", " + args[1];
+      /* MARS assembles li as one instruction (addiu or ori) when the value fits in -32768..65535, otherwise as lui + ori (two instructions). Keep the same addresses. */
+      var s32 = toS32(lv);
+      e.size = ((s32 >= -32768 && s32 <= 32767) || (lv >= 0 && lv <= 65535)) ? 4 : 8;
+      entries.push(e); addr += e.size; continue;
+    }
+    if (!ISA.hasOwnProperty(op)) return fail(ln, "instruction \"" + op + "\" is not supported (use add, sub, and, or, slt, addi, lw, sw, beq, or li)");
+    var def = ISA[op];
+    if (def.type === "R"){
+      if (args.length !== 3) return fail(ln, op + " needs 3 operands: " + op + " $rd, $rs, $rt");
+      var rd = parseReg(args[0]), rs = parseReg(args[1]), rt = parseReg(args[2]);
+      if (rd < 0) return fail(ln, "unknown register \"" + args[0] + "\"");
+      if (rs < 0) return fail(ln, "unknown register \"" + args[1] + "\"");
+      if (rt < 0) return fail(ln, "unknown register \"" + args[2] + "\"");
+      e.rd = rd; e.rs = rs; e.rt = rt; e.shamt = 0; e.funct = def.funct;
+      e.text = op + " " + regName(rd) + ", " + regName(rs) + ", " + regName(rt);
+    } else if (op === "addi"){
+      if (args.length !== 3) return fail(ln, "addi needs 3 operands: addi $rt, $rs, imm");
+      var art = parseReg(args[0]), ars = parseReg(args[1]);
+      if (art < 0) return fail(ln, "unknown register \"" + args[0] + "\"");
+      if (ars < 0) return fail(ln, "unknown register \"" + args[1] + "\"");
+      if (looksOctal(args[2])) return fail(ln, "immediate \"" + args[2] + "\" has a leading zero (MARS would read it as octal); write it without the zero or in 0x hex");
+      var aimm = parseImm16(args[2]);
+      if (aimm === null){
+        if (parseInt32(args[2]) === null) return fail(ln, "\"" + args[2] + "\" is not a valid immediate (decimal or 0x hex)");
+        return fail(ln, "immediate \"" + args[2] + "\" does not fit in 16 bits (-32768..32767 or 0x0000..0xFFFF)");
+      }
+      e.rt = art; e.rs = ars; e.imm = aimm; e.immText = args[2];
+      e.text = "addi " + regName(art) + ", " + regName(ars) + ", " + args[2];
+    } else if (op === "lw" || op === "sw"){
+      if (args.length !== 2) return fail(ln, op + " needs 2 operands: " + op + " $rt, imm($rs)");
+      var mrt = parseReg(args[0]); if (mrt < 0) return fail(ln, "unknown register \"" + args[0] + "\"");
+      var am = /^([^()]*)\(\s*(\$[A-Za-z0-9]+)\s*\)$/.exec(args[1]);
+      if (!am) return fail(ln, "memory operand must look like imm($rs), for example 0($sp)");
+      if (am[1].trim() === "") return fail(ln, "write the offset, for example 0($sp)");
+      var mrs = parseReg(am[2]); if (mrs < 0) return fail(ln, "unknown register \"" + am[2] + "\"");
+      if (looksOctal(am[1])) return fail(ln, "offset \"" + am[1].trim() + "\" has a leading zero (MARS would read it as octal); write it without the zero or in 0x hex");
+      var mimm = parseImm16(am[1]);
+      if (mimm === null){
+        if (parseInt32(am[1]) === null) return fail(ln, "\"" + am[1].trim() + "\" is not a valid offset (decimal or 0x hex)");
+        return fail(ln, "offset \"" + am[1].trim() + "\" does not fit in 16 bits (-32768..32767 or 0x0000..0xFFFF)");
+      }
+      e.rt = mrt; e.rs = mrs; e.imm = mimm; e.immText = am[1].trim();
+      e.text = op + " " + regName(mrt) + ", " + am[1].trim() + "(" + regName(mrs) + ")";
+    } else if (op === "beq"){
+      if (args.length !== 3) return fail(ln, "beq needs 3 operands: beq $rs, $rt, label");
+      var brs = parseReg(args[0]), brt = parseReg(args[1]);
+      if (brs < 0) return fail(ln, "unknown register \"" + args[0] + "\"");
+      if (brt < 0) return fail(ln, "unknown register \"" + args[1] + "\"");
+      if (!/^[A-Za-z_$.][A-Za-z0-9_$.]*$/.test(args[2])) return fail(ln, "beq needs a label as its target (MARS also rejects a number here)");
+      e.rs = brs; e.rt = brt; e.label = args[2];
+      e.text = "beq " + regName(brs) + ", " + regName(brt) + ", " + args[2];
+    }
+    entries.push(e); addr += 4;
+  }
+  /* resolve branch labels and build machine code */
+  for (i = 0; i < entries.length; i++){
+    var en = entries[i];
+    if (en.kind !== "instr") continue;
+    if (en.op === "beq"){
+      if (!labels.hasOwnProperty(en.label)) return fail(en.line, "label \"" + en.label + "\" is not defined");
+      var off = (labels[en.label] - (en.addr + 4)) / 4;
+      if (off < -32768 || off > 32767) return fail(en.line, "branch target is too far away");
+      en.imm = off; en.target = labels[en.label];
+    }
+    en.mc = encode(en);
+  }
+  return {ok:true, lines:entries, labels:labels, endAddr:addr};
+}
+
+function encode(e){
+  var d = ISA[e.op];
+  if (d.type === "R") return toU32((d.op << 26) | (e.rs << 21) | (e.rt << 16) | (e.rd << 11) | (e.shamt << 6) | e.funct);
+  return toU32((d.op << 26) | (e.rs << 21) | (e.rt << 16) | (e.imm & 0xFFFF));
+}
+
+function newState(){
+  var regs = []; for (var i = 0; i < 32; i++) regs.push(0);
+  regs[29] = SP_START; regs[28] = GP_START;
+  return {regs:regs, mem:{}, pc:TEXT_BASE, finished:false, error:null, touchedRegs:{29:true}, touchedMem:{}};
+}
+function cloneState(s){
+  return {regs:s.regs.slice(), mem:Object.assign({}, s.mem), pc:s.pc, finished:s.finished, error:s.error,
+          touchedRegs:Object.assign({}, s.touchedRegs), touchedMem:Object.assign({}, s.touchedMem)};
+}
+function readMem(s, a){ return s.mem.hasOwnProperty(a) ? s.mem[a] : 0; }
+
+/* Find the program entry at an address (traced instruction, setup line, or exit). */
+function entryAt(prog, addr){
+  for (var i = 0; i < prog.lines.length; i++){
+    var e = prog.lines[i];
+    if (e.kind !== "label" && e.addr === addr) return e;
+  }
+  return null;
+}
+
+/* Run one setup/exit line instantly. Returns a short description. */
+function runSetup(state, e){
+  if (e.kind === "setup"){
+    if (e.size === 8){ /* MARS expands this li into lui $at, hi and ori rt, $at, lo: $at changes too */
+      state.regs[1] = toS32(e.imm & 0xFFFF0000); state.touchedRegs[1] = true;
+    }
+    if (e.rt !== 0) state.regs[e.rt] = toS32(e.imm);
+    state.touchedRegs[e.rt] = true;
+    state.pc = e.addr + (e.size || 4);
+    return regName(e.rt) + " = " + fmt(state.regs[e.rt]) + (e.rt === 0 ? " ($zero cannot change)" : "");
+  }
+  if (e.kind === "exit"){
+    if (toS32(state.regs[2]) === 10){ state.finished = true; state.pc = e.addr + 4; return "syscall with $v0 = 10: program exit"; }
+    state.error = "syscall is supported only for exit ($v0 = 10); $v0 = " + dec(state.regs[2]) + " here"; state.finished = true;
+    return state.error;
+  }
+  return "";
+}
+
+/* Build the full trace of one traced instruction WITHOUT changing the state. */
+function traceInstr(state, e){
+  var d = ISA[e.op], c = d.ctl, pc = state.pc, pc4 = toU32(pc + 4);
+  var rs = e.rs, rt = e.rt;
+  var rd1 = state.regs[rs], rd2 = state.regs[rt];
+  var t = {entry:e, pc:pc, pc4:pc4, ctl:c, type:d.type, steps:[], writeReg:null, writeMem:null, nextPC:pc4, error:null};
+  var used = STEPS_USED[d.type === "R" ? "R" : e.op];
+  var isR = d.type === "R";
+  var wreg = c.RegWrite === 1 ? (c.RegDst === 1 ? e.rd : e.rt) : null;
+  var signImm = isR ? null : signExt16(e.imm);
+  var srcB = c.ALUSrc === 1 ? signImm : rd2;
+  var result = 0;
+  switch (e.op){
+    case "add": case "addi": case "lw": case "sw": result = toS32(rd1 + srcB); break;
+    case "sub": case "beq": result = toS32(rd1 - srcB); break;
+    case "and": result = toS32(rd1 & srcB); break;
+    case "or":  result = toS32(rd1 | srcB); break;
+    case "slt": result = (toS32(rd1) < toS32(srcB)) ? 1 : 0; break;
+  }
+  /* MARS (and real MIPS) stop add, sub and addi on signed overflow. The chapter ALU has no overflow output, so this is reported as a MARS runtime error. */
+  var overflow = false;
+  if (e.op === "add" || e.op === "addi" || e.op === "lw" || e.op === "sw"){ var sum = toS32(rd1) + toS32(srcB); overflow = (e.op === "add" || e.op === "addi") && (sum > 2147483647 || sum < -2147483648); }
+  else if (e.op === "sub"){ var dif = toS32(rd1) - toS32(srcB); overflow = (dif > 2147483647 || dif < -2147483648); }
+  var zero = (result === 0) ? 1 : 0;
+  var pcsrc = (c.Branch === 1 && zero === 1) ? 1 : 0;
+  var branchTarget = isR ? null : toU32(pc4 + (signImm << 2));
+  var readData = null, memErr = null;
+  if (e.op === "lw" || e.op === "sw"){
+    var ea = toU32(result);
+    if (ea % 4 !== 0) memErr = (e.op === "lw" ? "fetch" : "store") + " address not aligned on word boundary " + hex32(ea);
+    else if (e.op === "lw") readData = readMem(state, ea);
+  }
+  var wd3 = c.MemToReg === 1 ? readData : result;
+  var opName = e.op;
+  var skipNote = function(after){
+    var skipped = [], nextUsed = 6;
+    for (var k = after + 1; k <= 5; k++){ if (used.indexOf(k) >= 0){ nextUsed = k; break; } }
+    for (var k2 = after + 1; k2 < nextUsed; k2++) skipped.push(k2);
+    if (skipped.length === 0) return "";
+    return " (Step" + (skipped.length > 1 ? "s " : " ") + skipped.join(" and ") + (skipped.length > 1 ? " are" : " is") + " skipped: " + opName + " does not use " + (skipped.length > 1 ? "them" : "it") + ".)";
+  };
+  var ctlList = ["RegDst","ALUSrc","MemToReg","RegWrite","MemRead","MemWrite","Branch","ALUOp"];
+  var fieldStr = isR
+    ? "op = " + d.op + ", rs = " + rs + " (" + regName(rs) + "), rt = " + rt + " (" + regName(rt) + "), rd = " + e.rd + " (" + regName(e.rd) + "), shamt = 0, funct = " + e.funct
+    : "op = " + d.op + ", rs = " + rs + " (" + regName(rs) + "), rt = " + rt + " (" + regName(rt) + "), imm = " + hex16(e.imm) + " (" + e.imm + ")";
+
+  /* Step 1: Fetch */
+  t.steps.push({step:1, name:STEP_NAMES[1],
+    now:"Step 1, Fetch (IF): PC = " + hex32(pc) + " goes to Instruction Memory, which outputs Instr = " + hex32(e.mc) + " (" + e.text + "). At the same time the PC+4 Adder computes PC + 4 = " + hex32(pc4) + ".",
+    wires:[["PC", hex32(pc)], ["Instr", hex32(e.mc)], ["PC + 4", hex32(pc4)]],
+    nets:[["PC_IM","PC = " + hex32(pc)],["PC_ADD",null],["PC4","PC + 4 = " + hex32(pc4)]],
+    boxes:["PC","IM","PC4ADD"], ctlShow:[]});
+
+  /* Step 2: Decode */
+  var rd2Used = (e.op !== "addi" && e.op !== "lw");   /* notes, Figures 4 and 5: rt reaches A2, but RD2 is not used */
+  var decodeNets = [["OPC","opcode = " + bin(d.op,6) + " (" + d.op + ")"], ["RS","rs = " + regName(rs) + " (reg " + rs + ")"], ["RT","rt = " + regName(rt) + " (reg " + rt + ")"],
+                    ["RD1","RD1 = " + fmtShort(rd1)]];
+  if (rd2Used) decodeNets.push([e.op === "sw" ? "RD2_SW" : "RD2","RD2 = " + fmtShort(rd2)]);
+  var decodeBoxes = ["IM","MCU","RF"];
+  var decodeWires = [["opcode", bin(d.op,6) + " (" + d.op + ")"]];
+  if (isR){ decodeNets.push(["FUNCT","funct = " + bin(e.funct,6) + " (" + e.funct + ")"]); decodeBoxes.push("ALUDEC"); decodeWires.push(["funct", bin(e.funct,6) + " (" + e.funct + ")"]); }
+  decodeWires.push(["A1 = rs", regName(rs) + " (reg " + rs + ")"], ["RD1", fmt(rd1)], ["A2 = rt", regName(rt) + " (reg " + rt + ")"]);
+  if (rd2Used) decodeWires.push(["RD2", fmt(rd2)]); else decodeWires.push(["RD2", "not used"]);
+  var decodeNow = "Step 2, Decode (ID): the Main Control Unit reads opcode = " + d.op + " (" + e.op + ") and sets the control signals" + (isR ? "; the ALU Decoder reads funct = " + e.funct + " and sets ALUControl = " + c.ALUControl + " (" + d.aluName + ")" : "") + ". " +
+    "A1 = rs = " + regName(rs) + " (reg " + rs + ") -> RD1 = " + fmt(rd1) + "; A2 = rt = " + regName(rt) + " (reg " + rt + ")" + (rd2Used ? " -> RD2 = " + fmt(rd2) + ". " : ", but RD2 is not used by " + e.op + ". ");
+  if (wreg !== null){
+    decodeNets.push(["WRITEREG","A3 = " + regName(wreg) + " (reg " + wreg + ")"]);
+    if (c.RegDst === 1) decodeNets.push(["RD","rd = " + regName(e.rd) + " (reg " + e.rd + ")"]); else decodeNets.push(["RT_RD0",null]);
+    decodeNets.push(["CTL_REGDST","RegDst = " + c.RegDst]);
+    decodeBoxes.push("REGDST");
+    decodeWires.push(["A3 = WriteReg", regName(wreg) + " (reg " + wreg + ")"]);
+    decodeNow += "RegDst = " + c.RegDst + " -> A3 = " + (c.RegDst === 1 ? "rd" : "rt") + " = " + regName(wreg) + " (reg " + wreg + ") is the destination register.";
+  } else {
+    decodeNow += "RegWrite = 0, so " + e.op + " has no destination register (RegDst and MemToReg are don't cares, X).";
+  }
+  if (!isR){   /* notes, topic "Instruction Execution Steps": the immediate is sign-extended in the Decode step (I-type) */
+    decodeNow += " Sign Extender: imm = " + hex16(e.imm) + " -> SignImm = " + hex32(signImm) + " (" + signImm + ").";
+    decodeNets.push(["IMM","imm = " + hex16(e.imm) + " (" + e.imm + ")"]);
+    decodeNets.push([e.op === "beq" ? "SIGNIMM_BA" : "SIGNIMM_ALU","SignImm = " + hex32(signImm) + " (" + signImm + ")"]);
+    decodeBoxes.push("SE");
+    decodeWires.push(["imm", hex16(e.imm) + " (" + e.imm + ")"], ["SignImm", fmt(signImm)]);
+  }
+  decodeNow += skipNote(2);
+  t.steps.push({step:2, name:STEP_NAMES[2], now:decodeNow, wires:decodeWires, nets:decodeNets, boxes:decodeBoxes, ctlShow:ctlList});
+
+  /* Step 3: Execute (EX) — used by every instruction (notes, topic "Instruction Execution Steps") */
+  if (used.indexOf(3) >= 0){
+    if (isR){
+      var opSymR = {add:"+", sub:"-", and:"AND", or:"OR", slt:"<"}[e.op];
+      var calc;
+      if (e.op === "slt") calc = "Result = (" + dec(rd1) + " < " + dec(rd2) + ") = " + (result === 1 ? "true -> 1" : "false -> 0");
+      else if (e.op === "and" || e.op === "or") calc = "Result = " + hex32(rd1) + " " + opSymR + " " + hex32(rd2) + " = " + fmt(result);
+      else calc = "Result = " + dec(rd1) + " " + opSymR + " " + (rd2 < 0 ? "(" + dec(rd2) + ")" : dec(rd2)) + " = " + fmt(result);
+      var nowR = "Step 3, Execute (EX) (ALU op): SrcA = RD1 = " + fmt(rd1) + "; ALUSrc = 0 selects RD2 = " + fmt(rd2) + " as SrcB. ALUControl = " + c.ALUControl + " (" + d.aluName + "): " + calc + ". Zero = " + zero + " (the result is " + (zero === 1 ? "zero" : "nonzero") + "; Branch = 0, so Zero is not used)." + skipNote(3);
+      if (overflow){ nowR = "Step 3, Execute (EX) (ALU op): SrcA = RD1 = " + fmt(rd1) + "; ALUSrc = 0 selects RD2 = " + fmt(rd2) + " as SrcB. ALUControl = " + c.ALUControl + " (" + d.aluName + "): the true result of " + dec(rd1) + " " + opSymR + " " + (rd2 < 0 ? "(" + dec(rd2) + ")" : dec(rd2)) + " does not fit in 32 bits: arithmetic overflow. MARS stops the program here with this error."; t.error = "arithmetic overflow"; }
+      t.steps.push({step:3, name:STEP_NAMES[3] + " (ALU op)", now:nowR, error:(overflow ? "arithmetic overflow" : undefined),
+        wires:[["SrcA = RD1", fmt(rd1)], ["SrcB = RD2", fmt(rd2)], ["ALUControl", c.ALUControl + " (" + d.aluName + ")"], ["ALU Result", fmt(result)], ["Zero", String(zero)]],
+        nets:[["RD1","SrcA = RD1 = " + dec(rd1)], ["RD2_ALU","RD2 = " + dec(rd2)], ["SRCB","SrcB = " + dec(rd2)], ["ALUCTL","ALUControl = " + c.ALUControl], ["RESULT_OUT","Result = " + fmt(result)], ["ZERO_LABEL","Zero = " + zero], ["CTL_ALUSRC","ALUSrc = " + c.ALUSrc], ["ALUOP_DEC","ALUOp = " + c.ALUOp], ["FUNCT_DEC","funct = " + bin(e.funct,6)]],
+        boxes:["ALUSRC","ALU","ALUDEC"], ctlShow:["ALUSrc","ALUOp","ALUControl"]});
+    } else if (e.op === "beq"){
+      /* notes, topic "Instruction Execution Steps": the ALU compares while the Branch Adder computes the target; the two work in parallel in the same EX step */
+      var nowB = "Step 3, Execute (EX) (subtract, Zero; branch target): SrcA = RD1 = " + dec(rd1) + "; ALUSrc = 0 selects RD2 = " + dec(rd2) + " as SrcB. ALUControl = " + c.ALUControl + " (" + d.aluName + "): Result = " + dec(rd1) + " - " + (rd2 < 0 ? "(" + dec(rd2) + ")" : dec(rd2)) + " = " + dec(result) + ". " + (zero === 1 ? "Zero = 1 (the two values are equal)." : "Zero = 0 (the two values are different).") +
+        " In parallel the Branch Adder computes branch_target = (PC + 4) + (SignImm << 2) = " + hex32(branchTarget) + ", used only if the branch is taken." + skipNote(3);
+      t.steps.push({step:3, name:STEP_NAMES[3] + " (subtract, Zero; branch target)", now:nowB,
+        wires:[["SrcA = RD1", fmt(rd1)], ["SrcB = RD2", fmt(rd2)], ["ALUControl", c.ALUControl + " (" + d.aluName + ")"], ["ALU Result", fmt(result)], ["Zero", String(zero)], ["SignImm << 2", hex32(signImm << 2)], ["PC + 4", hex32(pc4)], ["branch_target", hex32(branchTarget)]],
+        nets:[["RD1","SrcA = RD1 = " + dec(rd1)], ["RD2_ALU","RD2 = " + dec(rd2)], ["SRCB","SrcB = " + dec(rd2)], ["ALUCTL","ALUControl = " + c.ALUControl], ["RESULT_OUT","Result = " + fmt(result)], ["ZERO_LABEL","Zero = " + zero], ["SIGNIMM_BA","SignImm = " + hex32(signImm) + " (" + signImm + ")"], ["PC4","PC + 4 = " + hex32(pc4)], ["BT","branch_target = " + hex32(branchTarget)], ["CTL_ALUSRC","ALUSrc = " + c.ALUSrc], ["ALUOP_DEC","ALUOp = " + c.ALUOp], ["FUNCT_DEC_NA","funct: ignored"]],
+        boxes:["ALUSRC","ALU","ALUDEC","BRADD"], ctlShow:["ALUSrc","ALUOp","ALUControl"]});
+    } else {
+      var isMem = (e.op !== "addi");
+      var what = STEP_NAMES[3] + (isMem ? " (base + offset)" : " (reg + imm)");
+      var now3 = "Step 3, " + what + ": ALUSrc = 1 selects SignImm = " + fmt(signImm) + " as SrcB; SrcA = RD1 = " + (isMem ? hex32(rd1) : fmt(rd1)) + ". The ALU adds (ALUControl = 010): Result = " + (isMem ? hex32(rd1) + " + " + hex32(signImm) + " = " + hex32(result) + (signImm === 0 ? "" : " (that is, " + hex32(rd1) + (signImm < 0 ? " - " + (-signImm) : " + " + signImm) + ")") : dec(rd1) + (signImm < 0 ? " - " + (-signImm) : " + " + signImm) + " = " + fmt(result)) + ".";
+      if (e.op !== "addi") now3 += (memErr ? " This effective address is not aligned on a word boundary." : " This is the effective address (EA).");
+      now3 += " Zero = " + zero + "." + skipNote(3);
+      if (overflow){ now3 = "Step 3, " + what + ": ALUSrc = 1 selects SignImm = " + fmt(signImm) + " as SrcB; SrcA = RD1 = " + fmt(rd1) + ". The ALU adds " + dec(rd1) + (signImm < 0 ? " - " + (-signImm) : " + " + signImm) + ", but the true result does not fit in 32 bits: arithmetic overflow. MARS stops the program here with this error."; t.error = "arithmetic overflow"; }
+      t.steps.push({step:3, name:what, now:now3, error:(overflow ? "arithmetic overflow" : undefined),
+        wires:[["SrcA = RD1", isMem ? hex32(rd1) : fmt(rd1)], ["SrcB = SignImm", fmt(signImm)], ["ALU Result", (isMem ? hex32(result) + " (EA)" : fmt(result))], ["Zero", String(zero)]],
+        nets:[["SIGNIMM_ALU","SignImm = " + hex32(signImm) + " (" + signImm + ")"], ["RD1","SrcA = RD1 = " + (isMem ? hex32(rd1) : dec(rd1))], ["SRCB","SrcB = " + dec(signImm)], ["ALUCTL","ALUControl = 010"], ["RESULT_OUT", (isMem ? "Result = EA = " + hex32(result) : "Result = " + fmt(result))], ["CTL_ALUSRC","ALUSrc = " + c.ALUSrc], ["ALUOP_DEC","ALUOp = " + c.ALUOp], ["FUNCT_DEC_NA","funct: ignored"]],
+        boxes:["ALUSRC","ALU","ALUDEC"], ctlShow:["ALUSrc","ALUOp","ALUControl"]});
+    }
+  }
+
+  /* Step 4: Memory access (MEM) — lw reads, sw writes (notes, topic "Instruction Execution Steps") */
+  if (used.indexOf(4) >= 0 && !t.error){
+    if (memErr){
+      t.steps.push({step:4, name:STEP_NAMES[4], now:"Step 4, Memory access (MEM): " + (e.op === "lw" ? "MemRead" : "MemWrite") + " = 1, but the address " + hex32(result) + " is not aligned on a word boundary. MARS stops the program here with the error \"" + memErr + "\".", error:memErr,
+        wires:(e.op === "lw" ? [["Address", hex32(result)]] : [["Address", hex32(result)], ["WriteData = RD2", fmt(rd2)]]),
+        nets:(e.op === "lw" ? [["RESULT_DM","Address = " + hex32(result)]] : [["RESULT_DM","Address = " + hex32(result)], ["RD2_DM","WriteData = RD2 = " + dec(rd2)]]).concat([["CTL_DM",(e.op === "lw" ? "MemRead" : "MemWrite") + " = 1"]]),
+        boxes:["DM"], ctlShow:[e.op === "lw" ? "MemRead" : "MemWrite"]});
+      t.error = memErr;
+    } else if (e.op === "lw"){
+      t.steps.push({step:4, name:STEP_NAMES[4],
+        now:"Step 4, Memory access (MEM): MemRead = 1. Data Memory reads the word at Address = ALU Result = " + hex32(result) + ". ReadData = " + fmt(readData) + "." + skipNote(4),
+        wires:[["Address = ALU Result", hex32(result)], ["ReadData", fmt(readData)]],
+        nets:[["RESULT_DM","Address = " + hex32(result)], ["READDATA","ReadData = " + fmt(readData)], ["CTL_DM","MemRead = 1"]],
+        boxes:["DM"], ctlShow:["MemRead"]});
+    } else {
+      t.writeMem = {addr:toU32(result), old:readMem(state, toU32(result)), value:rd2};
+      t.steps.push({step:4, name:STEP_NAMES[4],
+        now:"Step 4, Memory access (MEM): MemWrite = 1. Data Memory will write WriteData = RD2 = " + fmt(rd2) + " at Address = " + hex32(result) + " on the next rising clock edge. Nothing is written to the Register File (RegWrite = 0)." + skipNote(4),
+        wires:[["Address = ALU Result", hex32(result)], ["WriteData = RD2", fmt(rd2)]],
+        nets:[["RESULT_DM","Address = " + hex32(result)], ["RD2_DM","WriteData = RD2 = " + dec(rd2)], ["WD3_DM","WriteData = " + dec(rd2)], ["CTL_DM","MemWrite = 1"]],
+        boxes:["DM"], ctlShow:["MemWrite","RegWrite"]});
+    }
+  }
+
+  /* Step 5: Write back (WB) — R-type, addi, lw (notes, topic "Instruction Execution Steps") */
+  if (used.indexOf(5) >= 0 && !t.error){
+    var src = c.MemToReg === 1 ? "ReadData" : "Result";
+    t.writeReg = {reg:wreg, old:state.regs[wreg], value:toS32(wd3)};
+    var zeroNote = (wreg === 0) ? " The destination is $zero, which always stays 0, so the value is lost." : "";
+    t.steps.push({step:5, name:STEP_NAMES[5],
+      now:"Step 5, Write back (WB): MemToReg = " + c.MemToReg + " -> WD3 = " + src + " = " + fmt(wd3) + ". RegWrite = 1, so " + regName(wreg) + " (A3 = reg " + wreg + ") will be written with " + dec(wd3) + " on the next rising clock edge." + zeroNote,
+      wires:[["WD3 = " + src, fmt(wd3)], ["A3 = WriteReg", regName(wreg) + " (reg " + wreg + ")"]],
+      nets:[[c.MemToReg === 1 ? "READDATA" : "RESULT_MR", src + " = " + fmt(wd3)], ["WD3","WD3 = " + dec(wd3)], ["WD3_MUXOUT","WD3 = " + dec(wd3)], ["WD3_RF","WD3 = " + dec(wd3)], ["WRITEREG","A3 = " + regName(wreg) + " (reg " + wreg + ")"], ["CTL_MEMTOREG","MemToReg = " + c.MemToReg], ["CTL_REGWRITE","RegWrite = 1"]],
+      boxes:["MEMTOREG","RF"], ctlShow:["MemToReg","RegWrite"]});   /* RegDst acts in Decode; in WB it keeps the light set mark */
+  }
+
+  /* Cycle ends: PC update and commit */
+  if (!t.error){
+    var pcNow;
+    if (c.Branch === 1){
+      pcNow = (pcsrc === 1)
+        ? "Cycle ends: Branch = 1 and Zero = 1, so PCSrc = Branch AND Zero = 1. The PCSrc MUX selects input 1: PC <- branch_target = " + hex32(branchTarget) + ". The branch is TAKEN."
+        : "Cycle ends: Branch = 1 but Zero = 0, so PCSrc = Branch AND Zero = 0. The PCSrc MUX selects input 0: PC <- PC + 4 = " + hex32(pc4) + ". The branch is NOT taken.";
+    } else {
+      pcNow = "Cycle ends: Branch = 0, so PCSrc = Branch AND Zero = 0. The PCSrc MUX selects input 0: PC <- PC + 4 = " + hex32(pc4) + ".";
+    }
+    if (t.writeReg) pcNow += " On the same rising clock edge " + regName(wreg) + " <- " + fmt(t.writeReg.value) + (wreg === 0 ? " is ignored ($zero stays 0)." : ".");
+    if (t.writeMem) pcNow += " On the same rising clock edge memory[" + hex32(t.writeMem.addr) + "] <- " + fmt(t.writeMem.value) + ".";
+    t.nextPC = (pcsrc === 1) ? branchTarget : pc4;
+    var endNets = [["BRANCH","Branch = " + c.Branch], ["ZERO","Zero = " + zero], ["ZERO_AND","Zero = " + zero], ["PCSRC","PCSrc = " + pcsrc], ["NEXTPC","PC <- " + hex32(t.nextPC)]];
+    endNets.push(pcsrc === 1 ? ["BT","branch_target = " + hex32(branchTarget)] : ["PC4","PC + 4 = " + hex32(pc4)]);
+    var endWires = [["Branch", String(c.Branch)], ["Zero", String(zero)], ["PCSrc = Branch AND Zero", String(pcsrc)], ["Next PC", hex32(t.nextPC)]];
+    if (t.writeReg) endWires.push([regName(wreg) + " <-", fmt(t.writeReg.value)]);
+    if (t.writeMem) endWires.push(["memory[" + hex32(t.writeMem.addr) + "] <-", fmt(t.writeMem.value)]);
+    t.steps.push({step:"end", name:"Cycle ends", now:pcNow, wires:endWires, nets:endNets, boxes:["AND","PCSRC","PC"], ctlShow:["Branch"]});
+  }
+  t.used = used; t.result = result; t.zero = zero; t.pcsrc = pcsrc; t.signImm = signImm; t.branchTarget = branchTarget; t.readData = readData; t.wreg = wreg; t.fieldStr = fieldStr;
+  return t;
+}
+
+/* Apply the writes and the PC update of a trace to the state. */
+function commit(state, t){
+  state.touchedRegs[t.entry.rs] = true; state.touchedRegs[t.entry.rt] = true;
+  if (t.error){ state.error = t.error; state.finished = true; return; }
+  if (t.writeReg){ if (t.writeReg.reg !== 0) state.regs[t.writeReg.reg] = t.writeReg.value; state.touchedRegs[t.writeReg.reg] = true; }
+  if (t.writeMem){ state.mem[t.writeMem.addr] = t.writeMem.value; state.touchedMem[t.writeMem.addr] = true; }
+  if (t.readData !== null && t.readData !== undefined){ state.touchedMem[toU32(t.result)] = true; }
+  state.pc = t.nextPC;
+}
+
+/* Run the whole program instantly (used by the tests; the UI function runTo() has its own loop because it keeps the history). stopAddr: stop BEFORE the entry at this address. */
+function runAll(prog, state, stopAddr, maxInstr){
+  var count = 0, limit = maxInstr || 20000;
+  while (!state.finished){
+    var e = entryAt(prog, state.pc);
+    if (!e){ state.finished = true; break; }
+    if (stopAddr !== undefined && stopAddr !== null && e.addr === stopAddr) return {stopped:true, count:count};
+    if (e.kind === "instr"){ var t = traceInstr(state, e); commit(state, t); }
+    else runSetup(state, e);
+    count++;
+    if (count >= limit){ state.error = "Stopped after " + limit + " instructions (is there an endless loop?)"; state.finished = true; break; }
+  }
+  return {stopped:false, count:count};
+}
+
+return {VERSION:VERSION, REG_NAMES:REG_NAMES, TEXT_BASE:TEXT_BASE, SP_START:SP_START, ISA:ISA, STEPS_USED:STEPS_USED, STEP_NAMES:STEP_NAMES,
+        assemble:assemble, encode:encode, newState:newState, cloneState:cloneState, entryAt:entryAt, runSetup:runSetup, traceInstr:traceInstr, commit:commit, runAll:runAll,
+        hex32:hex32, hex16:hex16, bin:bin, fmt:fmt, dec:dec, regName:regName, signExt16:signExt16, toS32:toS32, toU32:toU32};
+})();
+if (typeof module !== "undefined" && module.exports) module.exports = CORE;
+/* === CORE END === */
+
+/* ===================== UI ===================== */
+(function(){
+"use strict";
+if (typeof document === "undefined") return;
+var C = CORE;
+var DEMO = [
+  "addi $t1, $zero, 7      # $t1 = 7",
+  "addi $t2, $zero, 7      # $t2 = 7",
+  "add  $t0, $t1, $t2      # $t0 = 14",
+  "addi $sp, $sp, -4       # reserve 4 bytes on the stack",
+  "sw   $t0, 0($sp)        # store 14",
+  "lw   $t3, 0($sp)        # $t3 = 14",
+  "addi $sp, $sp, 4        # release the 4 bytes",
+  "beq  $t1, $t2, done     # 7 == 7, taken",
+  "addi $t0, $t0, 100      # skipped",
+  "done:"
+].join("\n");
+
+/* ---- Diagram nets: name -> SVG ids of the wire pieces, plus where the value label goes (SVG coordinates). ----
+   The ids are the <line> and <path> ids inside L13_f2_base_datapath.svg. See README.md, "How the diagram is wired". */
+var NETS = {
+  PC_IM:      {ids:["w0_s1-6-37"], label:[296,650,"middle"]},
+  PC_ADD:     {ids:["w1_s2","w7_s3-5-1","w4_s1-7","w1_s2-3","w7_s3-5"]},
+  PC4:        {ids:["w8_s2-9","w7_s3-5-88-1-4","w3_s1","w7_s3-5-8","w7_s3-5-15","w7_s3-5-88","w1_s2-3-5","w2_s3","w2_s3-3"], label:[1000,96,"middle"]},
+  BT:         {ids:["w24_s1","w7_s3-5-88-1","w24_s2","w24_hop2","w24_s3","w7_s3-5-88-0","w2_s3-4"], label:[1430,96,"middle"]},
+  NEXTPC:     {ids:["w2_s3-0"], label:[160,596,"start"]},
+  PCSRC:      {ids:["w7_s3-0-9-20-0-6"], label:[80,522,"start"]},
+  BRANCH:     {ids:["w7_s3-0-9-20-0-6-3"], label:[330,450,"start"]},
+  ZERO:       {ids:["w20_s1-5","w7_s3-56-8-5","w20_s1","w7_s3-56-8-84","w20_s2","w7_s3-56-8-8","w7_s3-56-8-86","w10_s2-6","w7_s3-56-8-5-2","w17_hop4-6","w10_s2-6-5","w4_s2-4"], label:[1150,1325,"middle"]},
+  ZERO_LABEL: {ids:[], label:[2135,790,"start"]},   /* R-type Execute (EX): Zero is produced but not used, so no wire is lit */
+  ZERO_AND:   {ids:[], label:[330,497,"start"]},    /* Cycle ends: the Zero value at the AND gate input, under the Branch label */
+  OPC:        {ids:["w4_s1","w7_s3-0-6","w4_s2"], label:[815,470,"start"]},
+  RS:         {ids:["w5_s1","w7_s3-0-484"], label:[905,655,"middle"]},
+  RT:         {ids:["w6_s1","w7_s3-0-48"], label:[905,715,"middle"]},
+  RT_RD0:     {ids:["w7_s2","w7_s3"]},
+  RD:         {ids:["w4_s1-3-0","w7_s3-0-4","w8_s2","w8_s3"], label:[972,1045,"end"]},
+  FUNCT:      {ids:["w4_s1-3-9","w7_s3-0","w10_s2","w7_s3-0-9-2-2-0","w9_hop1-6","w10_s2-9","w9_s4","w7_s3-56","w9_s5"], label:[1800,1276,"middle"]},
+  IMM:        {ids:["w4_s1-3","w7_s3-0-96","w9_s1","w7_s3-0-9-2-2-0-3","w10_s3"], label:[900,1130,"middle"]},   /* above the wire, clear of the blue Instr[15:0] label */
+  SIGNIMM_ALU:{ids:["w17_s1","w7_s3-0-9-20","w17_s3","w7_s3-0-9-2","w16_s3"], label:[1485,1035,"end"]},
+  SIGNIMM_BA: {ids:["w17_s1","w7_s3-0-9-20","w17_s3","w17_s3b","w7_s3-0-9-2","w17_hop3","w17_s4","w7_s3-0-9-2-5","w17_hop4","w17_s5","w7_s3-0-9-2-5-3","w17_hop5","w17_s6","w17_s6-3","w17_s6-7","w17_s8"], label:[1485,1035,"end"]},
+  RD1:        {ids:["w12_s1","w7_s3-0-9"], label:[1790,562,"end"]},
+  RD2:        {ids:["w13_s1","w13_s1b","w7_s3-0-9-20-0"], label:[1395,712,"start"]},
+  RD2_ALU:    {ids:["w13_s1","w13_s1b","w7_s3-0-9-20-0"], label:[1395,712,"start"]},
+  RD2_SW:     {ids:["w13_s1"], label:[1395,712,"start"]},   /* sw: RD2 goes to Data Memory only; input 0 of ALUSrc stays gray (Figure 6) */
+  RD2_DM:     {ids:["w13_s1","w14_s2","w7_s3-0-9-2-2","w14_hop2","w14_s3","w14_s4","w7_s3-0-9-0","w14_s5","w14_hop5","w14_s6","w14_s7"], label:[1940,470,"end"]},
+  SRCB:       {ids:["w15_s3"], label:[1830,800,"start"]},
+  ALUCTL:     {ids:["w21_s1"], label:[2115,905,"start"]},   /* right beside the blue ALUControl wire label, baseline-aligned */
+  RESULT_OUT: {ids:["w14_s7-2"], label:[2178,636,"middle"]},
+  RESULT_DM:  {ids:["w14_s7-2","w14_s7-2b"], label:[2178,636,"middle"]},
+  RESULT_MR:  {ids:["w14_s7-2","w19_s1","w7_s3-0-9-20-9","w19_hop1","w19_s2","w19_s3","w7_s3-0-9-20-5","w19_s4"], label:[2450,405,"middle"]},
+  READDATA:   {ids:["w22_s3"], label:[2620,830,"end"]},
+  WD3:        {ids:["w23_s2-9","w7_s3-56-8-5-3","w23_s1","w7_s3-56-8-86-6","w23_s2","w7_s3-56-8-86-5","w23_s3","w23_hop3","w23_s3-4","w23_hop3-6","w23_s3-8","w11_s1"], label:[2022,1389,"start"]},   /* right beside the blue WD3 label on the bottom wire, baseline-aligned */
+  WRITEREG:   {ids:["w15_s3-7"], label:[900,978,"middle"]},
+  WD3_RF:     {ids:[], label:[1060,984,"start"]},   /* no wire; the WD3 value repeated at the Register File's WD3 (WriteData) port in the Write back step */
+  WD3_DM:     {ids:[], label:[2241,730,"start"]},   /* no wire; the WriteData value repeated at Data Memory's WriteData port in the sw Memory access step */
+  /* Control-signal values repeated at the component that consumes them, in the step where they act (no wires; the select wires are not drawn in the figure). */
+  CTL_REGDST: {ids:[], label:[772,935,"end"]},      /* beside the RegDst MUX's select text, one row above the A3 label (Decode) */
+  CTL_ALUSRC: {ids:[], label:[1646,955,"middle"]},  /* under the ALUSrc MUX (Execute) */
+  CTL_MEMTOREG:{ids:[], label:[2762,820,"middle"]}, /* under the MemToReg MUX (Write back) */
+  CTL_REGWRITE:{ids:[], label:[1255,890,"start"]},  /* beside the Register File's WE3 (RegWrite) port text (Write back) */
+  CTL_DM:     {ids:[], label:[2420,458,"middle"]},  /* above Data Memory (Memory access) */
+  ALUOP_DEC:  {ids:[], label:[1852,1086,"middle"]}, /* ALU Decoder input (Execute) */
+  FUNCT_DEC:  {ids:[], label:[2082,1086,"middle"]}, /* ALU Decoder input, R-type only (Execute) */
+  FUNCT_DEC_NA:{ids:[], label:[2082,1086,"middle"]},/* pale "funct: ignored" note for non-R-type (Execute); the _NA suffix renders it in the lite style */
+  WD3_MUXOUT: {ids:[], label:[3002,645,"end"]}      /* the WD3 value at the MemToReg MUX output, under the blue WD3 label (Write back) */
+};
+/* Component boxes (rect ids in the SVG) */
+var BOXES = {PC:"rect4", PCSRC:"rect5", PC4ADD:"rect6", IM:"rect7", MCU:"rect9", BRADD:"rect11", REGDST:"rect12", RF:"rect14", SE:"rect16", ALUSRC:"rect18", ALU:"rect20", ALUDEC:"rect21", DM:"rect23", MEMTOREG:"rect24", AND:"path2-20"};
+/* Control-signal arrows under the Main Control Unit: name -> [line id, label x] */
+var CTL = {RegDst:["line29",878], ALUSrc:["line30",979], MemToReg:["line31",1079], RegWrite:["line32",1180], MemRead:["line33",1281], MemWrite:["line34",1381], Branch:["line35",1482], ALUOp:["line36",1583], ALUControl:["w21_s1",null]};
+
+var $ = function(id){ return document.getElementById(id); };
+var svg = $("dp");
+var overlay = document.createElementNS("http://www.w3.org/2000/svg","g");
+overlay.setAttribute("id","overlay");
+svg.appendChild(overlay);
+
+/* Orange copies of the arrowhead markers, so a highlighted wire gets an orange arrowhead too. */
+(function makeHotMarkers(){
+  var defs = svg.querySelector("defs");
+  var markers = svg.querySelectorAll("marker");
+  for (var i = 0; i < markers.length; i++){
+    var m = markers[i], clone = m.cloneNode(true);
+    clone.setAttribute("id", m.id + "_hot");
+    var k = 3.4; /* arrowheads of highlighted wires: fixed size instead of growing with the thicker stroke */
+    clone.setAttribute("markerUnits", "userSpaceOnUse");
+    clone.setAttribute("markerWidth", String(parseFloat(m.getAttribute("markerWidth") || "3") * k));
+    clone.setAttribute("markerHeight", String(parseFloat(m.getAttribute("markerHeight") || "3") * k));
+    var paths = clone.querySelectorAll("path");
+    for (var j = 0; j < paths.length; j++){
+      var p = paths[j];
+      p.removeAttribute("id");
+      if (p.getAttribute("stroke")) p.setAttribute("stroke","#e2873e");
+      if (p.getAttribute("fill") && p.getAttribute("fill") !== "none") p.setAttribute("fill","#e2873e");
+      var st = p.getAttribute("style") || "";
+      st = st.replace(/stroke:[^;]+/g,"stroke:#e2873e").replace(/fill:(?!none)[^;]+/g,"fill:#e2873e");
+      if (st) p.setAttribute("style", st);
+    }
+    defs.appendChild(clone);
+  }
+})();
+function markerOf(el){
+  var me = el.getAttribute("marker-end");
+  if (!me){ var st = el.getAttribute("style") || ""; var m = /marker-end:\s*url\(#([^)]+)\)/.exec(st); if (m) me = "url(#" + m[1] + ")"; }
+  return me;
+}
+var hotEls = [];
+function clearHighlights(){
+  for (var i = 0; i < hotEls.length; i++){
+    var el = hotEls[i].el;
+    el.classList.remove("hot"); el.classList.remove("hotbox"); el.classList.remove("seton");
+    if (hotEls[i].marker !== undefined) el.style.markerEnd = hotEls[i].marker;
+  }
+  hotEls = [];
+  while (overlay.firstChild) overlay.removeChild(overlay.firstChild);
+}
+function hotWire(id){
+  var el = svg.getElementById(id);
+  if (!el || el.classList.contains("hot")) return;
+  var rec = {el:el};
+  var me = markerOf(el);
+  if (me){ var m = /url\(#([^)]+)\)/.exec(me); rec.marker = el.style.markerEnd || ""; el.style.markerEnd = "url(#" + m[1] + "_hot)"; }
+  el.classList.add("hot");
+  hotEls.push(rec);
+}
+function hotBox(key){
+  var el = svg.getElementById(BOXES[key]);
+  if (!el) return;
+  el.classList.add("hotbox"); hotEls.push({el:el});
+}
+function addLabel(x, y, anchor, text, lite){
+  var g = document.createElementNS("http://www.w3.org/2000/svg","g");
+  g.setAttribute("class", lite ? "vlabel lite" : "vlabel");
+  var r = document.createElementNS("http://www.w3.org/2000/svg","rect");
+  var t = document.createElementNS("http://www.w3.org/2000/svg","text");
+  t.setAttribute("x", x); t.setAttribute("y", y); t.setAttribute("text-anchor", anchor);
+  t.textContent = text;
+  g.appendChild(r); g.appendChild(t); overlay.appendChild(g);
+  var bb = t.getBBox();
+  r.setAttribute("x", bb.x - 8); r.setAttribute("y", bb.y - 4); r.setAttribute("width", bb.width + 16); r.setAttribute("height", bb.height + 8); r.setAttribute("rx", 6);
+}
+function crossBox(key){
+  /* Light gray diagonal cross over a component that the whole instruction does not use. */
+  var el = svg.getElementById(BOXES[key]);
+  if (!el || !el.getBBox) return;
+  var bb = el.getBBox(), pad = 12;
+  var pts = [[bb.x + pad, bb.y + pad, bb.x + bb.width - pad, bb.y + bb.height - pad],
+             [bb.x + pad, bb.y + bb.height - pad, bb.x + bb.width - pad, bb.y + pad]];
+  for (var i = 0; i < 2; i++){
+    var l = document.createElementNS("http://www.w3.org/2000/svg","line");
+    l.setAttribute("x1", pts[i][0]); l.setAttribute("y1", pts[i][1]);
+    l.setAttribute("x2", pts[i][2]); l.setAttribute("y2", pts[i][3]);
+    l.setAttribute("class","xmark");
+    overlay.appendChild(l);
+  }
+}
+function unusedBoxes(trace){
+  /* Components that this whole instruction never uses (crossed out in every step). */
+  var u = [], op = trace.entry.op;
+  if (trace.type === "R") u.push("SE");
+  if (op !== "beq") u.push("BRADD");
+  if (op !== "lw" && op !== "sw") u.push("DM");
+  if (op === "sw" || op === "beq") u.push("REGDST","MEMTOREG");
+  return u;
+}
+function outlineBox(key){
+  /* Dashed blue outline (clock-edge blue) around a unit that is written on the next rising clock edge. */
+  var el = svg.getElementById(BOXES[key]);
+  if (!el || !el.getBBox) return;
+  var bb = el.getBBox(), pad = 9;
+  var r = document.createElementNS("http://www.w3.org/2000/svg","rect");
+  r.setAttribute("x", bb.x - pad); r.setAttribute("y", bb.y - pad);
+  r.setAttribute("width", bb.width + 2 * pad); r.setAttribute("height", bb.height + 2 * pad);
+  r.setAttribute("rx", 12); r.setAttribute("class","edgewrite");
+  overlay.appendChild(r);
+}
+var CTL_ALL = ["RegDst","ALUSrc","MemToReg","RegWrite","MemRead","MemWrite","Branch","ALUOp"];
+function showStep(st, trace){
+  clearHighlights();
+  if (!st) return;
+  var i;
+  for (i = 0; i < st.nets.length; i++){
+    var name = st.nets[i][0], text = st.nets[i][1], net = NETS[name];
+    if (!net) continue;
+    for (var j = 0; j < net.ids.length; j++) hotWire(net.ids[j]);
+    if (text && net.label) addLabel(net.label[0], net.label[1], net.label[2], text, /_NA$/.test(name));   /* _NA nets are pale notes ("present but not used") */
+  }
+  for (i = 0; i < st.boxes.length; i++) hotBox(st.boxes[i]);
+  for (i = 0; i < st.ctlShow.length; i++){
+    var cs = st.ctlShow[i], c = CTL[cs];
+    if (!c) continue;
+    hotWire(c[0]);
+    var v = (cs === "ALUControl") ? null : String(trace.ctl[cs]);
+    if (v !== null) addLabel(c[1], 428, "middle", v);
+  }
+  /* Signal lifetime: the Main Control Unit sets every control signal in the Decode step, and the values
+     hold until the cycle ends. From Decode on, the signals not acting in this step keep a light "set" mark. */
+  if (trace && st.step !== 1){
+    for (i = 0; i < CTL_ALL.length; i++){
+      var sn = CTL_ALL[i];
+      if (st.ctlShow.indexOf(sn) >= 0) continue;
+      var cc = CTL[sn];
+      var sEl = svg.getElementById(cc[0]);
+      if (sEl && !sEl.classList.contains("hot")){ sEl.classList.add("seton"); hotEls.push({el:sEl}); }
+      addLabel(cc[1], 428, "middle", String(trace.ctl[sn]), true);
+    }
+  }
+  /* Components the whole instruction never uses get a gray cross in every step. */
+  if (trace){
+    var ub = unusedBoxes(trace);
+    for (i = 0; i < ub.length; i++) crossBox(ub[i]);
+  }
+  /* Cycle ends: dashed blue outline around every unit written on the rising clock edge. */
+  if (trace && st.step === "end"){
+    outlineBox("PC");
+    if (trace.writeReg) outlineBox("RF");
+    if (trace.writeMem) outlineBox("DM");
+  }
+}
+
+/* ---------------- Simulator state ---------------- */
+var prog = null;           /* assembled program */
+var state = null;          /* machine state after all committed instructions */
+var hist = [];             /* [{before:state snapshot, setup:[entry...], trace:trace}] for every traced instruction done or in progress */
+var curTrace = null;       /* trace of the instruction in progress (not yet committed) */
+var curStep = -1;          /* index into curTrace.steps, -1 = nothing started */
+var committed = false;     /* true when curTrace has been committed (we are at its "Cycle ends" state) */
+var finishedMsg = null;    /* message when the program is finished */
+var breakpoints = {};      /* addr -> true */
+var playTimer = null;
+var lastWrite = {reg:null, mem:null};
+
+var SPEEDS = [0, 8000, 5000, 3000, 2000, 1200, 700, 350];   /* milliseconds per step, slider positions 1..7 */
+function speedMs(){ return SPEEDS[parseInt($("speed").value,10)] || 2000; }
+function renderSpeed(){ var ms = speedMs(); $("speedText").textContent = "1 step / " + (ms >= 1000 ? (ms / 1000) + " s" : ms + " ms"); }
+$("speed").addEventListener("input", renderSpeed); $("speed").addEventListener("change", function(){ this.blur(); }); renderSpeed();
+
+function loadProgram(){
+  var r = C.assemble($("code").value);
+  var msg = $("loadMsg");
+  if (!r.ok){ msg.className = "err"; msg.innerHTML = '<span class="warn">&#9888;</span><span>' + esc("Line " + r.line + ": " + r.msg + ". The program was not loaded.") + "</span>"; return false; }
+  prog = r;
+  breakpoints = {};
+  var n = prog.lines.filter(function(e){ return e.kind === "instr"; }).length;
+  var other = prog.lines.filter(function(e){ return e.kind === "setup" || e.kind === "exit"; }).length;
+  msg.className = "ok"; msg.textContent = "Loaded: " + n + " traced instruction" + (n === 1 ? "" : "s") + (other > 0 ? " and " + other + " setup line" + (other === 1 ? "" : "s") : "") + (n > 0 ? ". Press Next step (Space) to start." : ". There is nothing to trace.");
+  resetMachine();
+  return true;
+}
+
+function resetMachine(){
+  stopPlay();
+  state = C.newState(); hist = []; curTrace = null; curStep = -1; committed = false; finishedMsg = null; lastWrite = {reg:null, mem:null};
+  advanceToNextInstr(); /* runs leading setup lines and prepares the first traced instruction (step not started) */
+  render();
+}
+
+/* Move past setup/exit lines at the current PC and prepare the trace of the next traced instruction. Does not start its steps. */
+function advanceToNextInstr(){
+  if (!prog) return;
+  var before = C.cloneState(state), setup = [];
+  while (!state.finished){
+    var e = C.entryAt(prog, state.pc);
+    if (!e){ state.finished = true; finishedMsg = (prog.lines.length ? "Program finished: PC = " + C.hex32(state.pc) + " is past the last line." : "The program has no instructions."); break; }
+    if (e.kind === "instr"){
+      curTrace = C.traceInstr(state, e); curStep = -1; committed = false;
+      hist.push({before:before, setup:setup, trace:curTrace});
+      return;
+    }
+    var d = C.runSetup(state, e); setup.push({entry:e, text:d});
+    if (state.error){ finishedMsg = "Stopped at line " + e.line + ": " + state.error; }
+    else if (state.finished){ finishedMsg = "Program finished: " + d + "."; }
+  }
+  curTrace = null; curStep = -1; committed = false;
+  if (setup.length) hist.push({before:before, setup:setup, trace:null});
+}
+
+/* One "Next step". Returns {moved:boolean, entered:boolean}; entered = true when a new instruction was started. */
+function nextStep(){
+  if (!prog || !curTrace) return {moved:false, entered:false};
+  if (curStep < curTrace.steps.length - 1){
+    curStep++;
+    var st = curTrace.steps[curStep];
+    if (st.step === "end"){ C.commit(state, curTrace); committed = true; lastWrite = {reg:curTrace.writeReg ? curTrace.writeReg.reg : null, mem:curTrace.writeMem ? curTrace.writeMem.addr : null}; }
+    else if (st.error){ C.commit(state, curTrace); committed = true; finishedMsg = "Stopped at line " + curTrace.entry.line + ": " + st.error + "."; }
+    return {moved:true, entered:false};
+  }
+  /* past the last state of this instruction: go to the next instruction's first step */
+  if (!committed){ C.commit(state, curTrace); committed = true; }
+  lastWrite = {reg:null, mem:null};
+  if (state.finished) return {moved:false, entered:false};
+  advanceToNextInstr();
+  if (!curTrace) return {moved:true, entered:false};
+  curStep = 0;
+  return {moved:true, entered:true};
+}
+function showEndOfLastInstr(){
+  /* show the "Cycle ends" state of the last traced instruction in hist (hist must end with a traced entry) */
+  var prev = hist[hist.length - 1];
+  state = C.cloneState(prev.before);
+  for (var k = 0; k < prev.setup.length; k++) C.runSetup(state, prev.setup[k].entry);
+  curTrace = prev.trace; curStep = curTrace.steps.length - 1; committed = false; finishedMsg = null;
+  C.commit(state, curTrace); committed = true;
+  lastWrite = {reg:curTrace.writeReg ? curTrace.writeReg.reg : null, mem:curTrace.writeMem ? curTrace.writeMem.addr : null};
+  if (curTrace.steps[curStep].error) finishedMsg = "Stopped at line " + curTrace.entry.line + ": " + curTrace.steps[curStep].error + ".";
+}
+function prevStep(){
+  if (!prog) return;
+  stopPlay();
+  if (curTrace && curStep > 0){
+    if (committed){ /* undo the commit: restore the state before this instruction, then re-run its setup lines */
+      var h = hist[hist.length - 1];
+      state = C.cloneState(h.before);
+      for (var i = 0; i < h.setup.length; i++) C.runSetup(state, h.setup[i].entry);
+      committed = false; finishedMsg = null;
+    }
+    curStep--; lastWrite = {reg:null, mem:null};
+    render(); return;
+  }
+  if (curTrace && curStep === 0 && hist.length === 1){ curStep = -1; render(); return; }
+  if (curTrace && curStep === -1 && hist.length === 1){ return; }
+  if (curTrace){ hist.pop(); }                                   /* leave the current instruction */
+  else if (hist.length && !hist[hist.length - 1].trace){ hist.pop(); } /* program finished after setup lines only */
+  if (hist.length && !hist[hist.length - 1].trace){ hist.pop(); }
+  if (!hist.length){ resetMachine(); return; }
+  showEndOfLastInstr();
+  render();
+}
+/* Next instruction: finish the current instruction (to Cycle ends). If it is already finished, start the next one and finish it,
+   unless the next one has a breakpoint: then stop in its Ready state. */
+function nextInstr(){
+  if (!prog || !curTrace) return;
+  stopPlay();
+  if (curStep === curTrace.steps.length - 1){
+    var r = nextStep();
+    if (!r.moved){ render(); return; }
+    if (r.entered && breakpoints[curTrace.entry.addr]){ curStep = -1; render(); return; }
+  }
+  while (curTrace && curStep < curTrace.steps.length - 1){ if (!nextStep().moved) break; }
+  render();
+}
+/* Is there a breakpoint on an instruction that will run AFTER the current one? (simulated on a copy of the state) */
+function breakpointAhead(){
+  if (!Object.keys(breakpoints).length) return false;
+  var st = C.cloneState(state);
+  if (curTrace && !committed) C.commit(st, curTrace);
+  for (var n = 0; n < 20000 && !st.finished; n++){
+    var e = C.entryAt(prog, st.pc);
+    if (!e) return false;
+    if (e.kind === "instr"){ if (breakpoints[e.addr]) return true; var t = C.traceInstr(st, e); C.commit(st, t); if (st.error) return false; }
+    else C.runSetup(st, e);
+  }
+  return false;
+}
+function play(){
+  if (!prog || playTimer) return;
+  var atBp = curTrace && curStep === -1 && breakpoints[curTrace.entry.addr];
+  if (!atBp && breakpointAhead()){
+    /* run instantly (no animation) up to the breakpoint and stop in its Ready state; Play again animates from there */
+    for (var n = 0; n < 200000; n++){
+      var r0 = nextStep();
+      if (r0.entered && breakpoints[curTrace.entry.addr]){ curStep = -1; break; }
+      if (!r0.moved) break;
+    }
+    if (hist.length > 500) hist = hist.slice(-500);
+    render(); return;
+  }
+  $("btnPlay").disabled = true;
+  function tick(){
+    var r = nextStep();
+    if (r.entered && breakpoints[curTrace.entry.addr]){ curStep = -1; stopPlay(); render(); return; }
+    render();
+    if (!r.moved || !curTrace){ stopPlay(); render(); return; }
+    playTimer = setTimeout(tick, speedMs());
+  }
+  playTimer = setTimeout(tick, 50);
+}
+function stopPlay(){ if (playTimer){ clearTimeout(playTimer); playTimer = null; } $("btnPlay").disabled = false; }
+
+/* Run to here: run instantly up to (not including) the entry at addr, then show its Step 1. */
+function runTo(addr){
+  if (!prog) return;
+  stopPlay();
+  state = C.newState(); hist = []; curTrace = null; curStep = -1; committed = false; finishedMsg = null; lastWrite = {reg:null, mem:null};
+  var count = 0;
+  while (true){
+    var before = C.cloneState(state), setup = [];
+    var e = C.entryAt(prog, state.pc);
+    while (e && e.kind !== "instr" && e.addr !== addr && !state.finished){
+      var d = C.runSetup(state, e); setup.push({entry:e, text:d}); count++;
+      e = C.entryAt(prog, state.pc);
+    }
+    if (state.error){ finishedMsg = "Stopped: " + state.error; hist.push({before:before, setup:setup, trace:null}); break; }
+    if (state.finished){ finishedMsg = "Program finished before reaching that line."; hist.push({before:before, setup:setup, trace:null}); break; }
+    if (!e){ state.finished = true; finishedMsg = "Program finished before reaching that line."; hist.push({before:before, setup:setup, trace:null}); break; }
+    if (e.addr === addr){
+      if (e.kind === "instr"){ curTrace = C.traceInstr(state, e); curStep = 0; hist.push({before:before, setup:setup, trace:curTrace}); }
+      else { /* a setup/exit line was clicked: run it and show the next instruction */
+        if (setup.length) hist.push({before:before, setup:setup, trace:null});
+        advanceToNextInstr(); if (curTrace) curStep = 0;
+      }
+      break;
+    }
+    var t = C.traceInstr(state, e); hist.push({before:before, setup:setup, trace:t}); C.commit(state, t); count++;
+    if (state.error){ finishedMsg = "Stopped at line " + e.line + ": " + state.error + "."; curTrace = t; curStep = t.steps.length - 1; committed = true; break; }
+    if (count >= 20000){ state.error = "Stopped after 20000 instructions (is there an endless loop?)"; state.finished = true; finishedMsg = state.error + "."; break; }
+  }
+  if (hist.length > 500) hist = hist.slice(-500);   /* keep memory small; Previous step can still go back 500 instructions */
+  render();
+}
+
+/* ---------------- Rendering ---------------- */
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function renderStrip(){
+  var strip = $("strip"), html = "";
+  var used = curTrace ? curTrace.used : [];
+  var st = (curTrace && curStep >= 0) ? curTrace.steps[curStep] : null;
+  for (var s = 1; s <= 5; s++){
+    var cls = "stage";
+    if (curTrace && used.indexOf(s) < 0) cls += " skip";
+    else if (st && st.step === s) cls += " cur";
+    else if (st && (st.step === "end" || st.step > s)) cls += " done";
+    var label = C.STEP_NAMES[s];
+    if (s === 3 && curTrace && curTrace.type === "R") label += " (ALU op)";
+    if (s === 3 && curTrace && curTrace.entry.op === "beq") label += " (subtract, Zero; branch target)";
+    if (s === 3 && curTrace && curTrace.entry.op === "addi") label += " (reg + imm)";
+    if (s === 3 && curTrace && (curTrace.entry.op === "lw" || curTrace.entry.op === "sw")) label += " (base + offset)";
+    html += '<div class="' + cls + '"><span>Step ' + s + ': ' + esc(label) + '</span><span class="w" aria-hidden="true">Step ' + s + ': ' + esc(label) + '</span></div>';
+  }
+  html += '<div class="stage end' + (st && st.step === "end" ? " cur" : "") + '"><span>Cycle ends</span><span class="w" aria-hidden="true">Cycle ends</span></div>';
+  strip.innerHTML = html;
+}
+/* Scroll only inside the given panel (scrollIntoView would also scroll the whole page) */
+function scrollWithin(box, el){
+  if (!box || !el) return;
+  var b = box.getBoundingClientRect(), e = el.getBoundingClientRect();
+  if (e.top < b.top) box.scrollTop -= (b.top - e.top);
+  else if (e.bottom > b.bottom) box.scrollTop += (e.bottom - b.bottom);
+}
+function renderProgram(){
+  var el = $("prog"), html = "";
+  if (!prog){ el.innerHTML = '<div class="note">No program loaded.</div>'; return; }
+  var curAddr = curTrace ? curTrace.entry.addr : null;
+  var doneAddrs = {};
+  for (var i = 0; i < hist.length; i++){
+    var h = hist[i];
+    for (var j = 0; j < h.setup.length; j++) doneAddrs[h.setup[j].entry.addr] = true;
+    if (h.trace && h.trace !== curTrace) doneAddrs[h.trace.entry.addr] = true;
+  }
+  if (curTrace && committed) doneAddrs[curTrace.entry.addr] = true;
+  for (var k = 0; k < prog.lines.length; k++){
+    var e = prog.lines[k], cls = "ln";
+    if (e.kind === "label") cls += " label";
+    else if (e.kind !== "instr") cls += " setup";
+    if (e.kind !== "label" && e.addr === curAddr && curTrace) cls += " cur";
+    else if (e.kind !== "label" && doneAddrs[e.addr]) cls += " done";
+    var bp = (e.kind !== "instr") ? '<span style="width:11px;display:inline-block"></span>' : '<span class="bp' + (breakpoints[e.addr] ? " on" : "") + '" data-addr="' + e.addr + '" title="Breakpoint"></span>';
+    html += '<div class="' + cls + '" data-addr="' + e.addr + '" data-kind="' + e.kind + '">' + bp + '<span class="addr">' + C.hex32(e.addr) + '</span> ' + esc(e.text) + '</div>';
+  }
+  el.innerHTML = html;
+  scrollWithin(el, el.querySelector(".cur"));
+  $("pcLine").innerHTML = "<b>PC</b> = " + (curTrace && !committed ? C.hex32(curTrace.pc) : C.hex32(state.pc));
+}
+function sigCell(id, v){
+  var td = $(id); td.textContent = v; td.className = (v === "X") ? "x" : (v === "1" ? "one" : "");
+}
+function renderCurrent(){
+  var e = curTrace ? curTrace.entry : null;
+  if (!e){
+    $("ciText").innerHTML = "&nbsp;"; $("ciMeta").innerHTML = "&nbsp;"; $("ciBits").innerHTML = "";
+    ["sRegDst","sALUSrc","sMemToReg","sRegWrite","sMemRead","sMemWrite","sBranch","sALUOp","sALUControl"].forEach(function(id){ $(id).textContent = ""; $(id).className = ""; });
+    $("fText").innerHTML = "&nbsp;"; $("fSig").innerHTML = "";
+    return;
+  }
+  var c = curTrace.ctl, d = C.ISA[e.op];
+  $("ciText").textContent = e.text;
+  $("ciMeta").textContent = (d.type === "R" ? "R-type" : "I-type") + "  |  machine code " + C.hex32(e.mc) + "  |  at " + C.hex32(e.addr);
+  var b = "";
+  if (d.type === "R"){
+    b += '<div class="f-op">' + C.bin(d.op,6) + '<small>op = ' + d.op + '</small></div>';
+    b += '<div class="f-rs">' + C.bin(e.rs,5) + '<small>rs = ' + e.rs + ' (' + C.regName(e.rs) + ')</small></div>';
+    b += '<div class="f-rt">' + C.bin(e.rt,5) + '<small>rt = ' + e.rt + ' (' + C.regName(e.rt) + ')</small></div>';
+    b += '<div class="f-rd">' + C.bin(e.rd,5) + '<small>rd = ' + e.rd + ' (' + C.regName(e.rd) + ')</small></div>';
+    b += '<div class="f-sh">00000<small>shamt = 0</small></div>';
+    b += '<div class="f-fn">' + C.bin(e.funct,6) + '<small>funct = ' + e.funct + '</small></div>';
+  } else {
+    b += '<div class="f-op">' + C.bin(d.op,6) + '<small>op = ' + d.op + '</small></div>';
+    b += '<div class="f-rs">' + C.bin(e.rs,5) + '<small>rs = ' + e.rs + ' (' + C.regName(e.rs) + ')</small></div>';
+    b += '<div class="f-rt">' + C.bin(e.rt,5) + '<small>rt = ' + e.rt + ' (' + C.regName(e.rt) + ')</small></div>';
+    b += '<div class="f-imm">' + C.bin(e.imm,16) + '<small>imm = ' + C.hex16(e.imm) + ' (' + e.imm + (e.op === "beq" ? (Math.abs(e.imm) === 1 ? " word" : " words") : "") + ')</small></div>';
+  }
+  $("ciBits").innerHTML = b;
+  sigCell("sRegDst", String(c.RegDst)); sigCell("sALUSrc", String(c.ALUSrc)); sigCell("sMemToReg", String(c.MemToReg));
+  sigCell("sRegWrite", String(c.RegWrite)); sigCell("sMemRead", String(c.MemRead)); sigCell("sMemWrite", String(c.MemWrite));
+  sigCell("sBranch", String(c.Branch)); sigCell("sALUOp", c.ALUOp); sigCell("sALUControl", c.ALUControl + " (" + d.aluName + ")");
+  $("sALUControl").className = "";
+  /* Datapath view: the same signals as small chips under the Program panel */
+  $("fText").textContent = e.text;
+  var fs = "";
+  [["RegDst",c.RegDst],["ALUSrc",c.ALUSrc],["MemToReg",c.MemToReg],["RegWrite",c.RegWrite],["MemRead",c.MemRead],["MemWrite",c.MemWrite],["Branch",c.Branch],["ALUOp",c.ALUOp],["ALUControl",c.ALUControl]].forEach(function(p){
+    var v = String(p[1]), cls = v === "1" ? " class=\"one\"" : (v === "X" ? " class=\"x\"" : "");
+    fs += '<span' + cls + '>' + p[0] + ' = ' + esc(v) + '</span>';
+  });
+  $("fSig").innerHTML = fs;
+}
+function renderTables(){
+  var st = (curTrace && curStep >= 0) ? curTrace.steps[curStep] : null;
+  var w = '<tr><th>Wire</th><th>Value</th></tr>';
+  if (st){ for (var i = 0; i < st.wires.length; i++) w += '<tr><td>' + esc(st.wires[i][0]) + '</td><td class="mono">' + esc(st.wires[i][1]) + '</td></tr>'; }
+  else w += '<tr><td colspan="2" class="note">' + ((prog && state.finished && !curTrace) ? "Program finished." : "Press Next step to see the first wires.") + '</td></tr>';
+  $("wires").innerHTML = w; $("fWires").innerHTML = w;
+  /* registers: the state shown is the committed state; during an instruction, the register about to be written shows old -> new */
+  var r = '<tr><th>Reg</th><th>Value</th><th>Hex</th></tr>';
+  var pending = (curTrace && !committed && curStep >= 0 && curTrace.writeReg && curStep >= curTrace.steps.length - 2) ? curTrace.writeReg : null;
+  var regsTouched = Object.keys(state.touchedRegs).map(Number);
+  if (curTrace){ [curTrace.entry.rs, curTrace.entry.rt, curTrace.entry.rd].forEach(function(n){ if (n !== undefined && regsTouched.indexOf(n) < 0) regsTouched.push(n); }); }
+  regsTouched.sort(function(a,b){ return a - b; });
+  for (var k = 0; k < regsTouched.length; k++){
+    var n = regsTouched[k], v = state.regs[n], cls = "mono";
+    var val = C.dec(v), hx = C.hex32(v);
+    if (pending && pending.reg === n && n !== 0){ val = C.dec(pending.old) + " -> " + C.dec(pending.value); hx = C.hex32(pending.old) + " -> " + C.hex32(pending.value); cls += " chg"; }
+    else if (lastWrite.reg === n && committed && n !== 0) cls += " chg";
+    r += '<tr><td>' + C.regName(n) + '</td><td class="' + cls + '">' + val + '</td><td class="mono">' + hx + '</td></tr>';
+  }
+  $("regs").innerHTML = r;
+  scrollWithin($("regsWrap"), $("regs").querySelector(".chg"));
+  var m = '<tr><th>Address</th><th>Value</th><th>Hex</th></tr>';
+  var addrs = Object.keys(state.touchedMem).map(Number);
+  var pendingMem = (curTrace && !committed && curStep >= 0 && curTrace.writeMem && curTrace.steps[curStep].step === 4) ? curTrace.writeMem : null;
+  if (pendingMem && addrs.indexOf(pendingMem.addr) < 0) addrs.push(pendingMem.addr);
+  if (curTrace && curStep >= 0 && curTrace.entry.op === "lw" && curTrace.readData !== null && curTrace.steps[curStep].step !== 1 && curTrace.steps[curStep].step !== 2 && curTrace.steps[curStep].step !== 3 && addrs.indexOf(C.toU32(curTrace.result)) < 0) addrs.push(C.toU32(curTrace.result));
+  addrs.sort(function(a,b){ return a - b; });
+  if (addrs.length === 0) m += '<tr><td colspan="3" class="note">No word touched yet.</td></tr>';
+  for (var q = 0; q < addrs.length; q++){
+    var a = addrs[q], mv = state.mem.hasOwnProperty(a) ? state.mem[a] : 0, mcls = "mono";
+    var mval = C.dec(mv), mhx = C.hex32(mv);
+    if (pendingMem && pendingMem.addr === a){ mval = C.dec(pendingMem.old) + " -> " + C.dec(pendingMem.value); mhx = C.hex32(pendingMem.old) + " -> " + C.hex32(pendingMem.value); mcls += " chg"; }
+    else if (lastWrite.mem === a && committed) mcls += " chg";
+    m += '<tr><td class="mono">' + C.hex32(a) + '</td><td class="' + mcls + '">' + mval + '</td><td class="mono">' + mhx + '</td></tr>';
+  }
+  $("mem").innerHTML = m;
+}
+function renderNow(){
+  var now = $("now");
+  now.className = "now";
+  if (!prog){ now.textContent = "Load a program to start."; return; }
+  var st = (curTrace && curStep >= 0) ? curTrace.steps[curStep] : null;
+  if (st){
+    now.innerHTML = "<b>" + esc(curTrace.entry.text) + "</b> &nbsp;|&nbsp; " + esc(st.now);
+    if (st.error){ now.className = "now err"; now.innerHTML += " <b>Stopped at line " + curTrace.entry.line + ".</b>"; }
+    if (st.step === "end" && state.finished && finishedMsg) now.innerHTML += " <b>" + esc(finishedMsg) + "</b>";
+    else if (st.step === "end" && committed && !state.finished && !C.entryAt(prog, state.pc)) now.innerHTML += " <b>Program finished: PC = " + C.hex32(state.pc) + " is past the last line.</b>";
+    return;
+  }
+  if (curTrace){
+    var h = hist[hist.length - 1], pre = "";
+    if (h && h.setup.length){ pre = "Setup line" + (h.setup.length > 1 ? "s" : "") + " (not traced): " + h.setup.map(function(s){ return s.entry.text + " -> " + s.text; }).join("; ") + ". "; }
+    now.innerHTML = esc(pre) + "Ready: <b>" + esc(curTrace.entry.text) + "</b> at PC = " + C.hex32(curTrace.pc) + (breakpoints[curTrace.entry.addr] ? " (breakpoint)" : "") + ". Press Next step (Space) to begin Step 1, Fetch (IF).";
+    return;
+  }
+  var fm = finishedMsg || "Program finished.";
+  if (!/[.!]$/.test(fm)) fm += ".";
+  now.innerHTML = "<b>" + esc(fm) + "</b> Press Reset (R) to start again.";
+  if (state.error) now.className = "now err";
+}
+function render(){
+  renderStrip(); renderProgram(); renderCurrent(); renderTables(); renderNow();
+  showStep((curTrace && curStep >= 0) ? curTrace.steps[curStep] : null, curTrace);
+  var done = !prog || (!curTrace ? state.finished : (committed && curStep === curTrace.steps.length - 1 && (state.finished || !C.entryAt(prog, state.pc))));
+  $("btnNext").disabled = done;
+  $("btnNextInstr").disabled = done;
+  if (done && !playTimer) $("btnPlay").disabled = true; else if (!playTimer) $("btnPlay").disabled = false;
+  var anyTraced = hist.some(function(h){ return !!h.trace; });
+  $("btnPrev").disabled = !prog || !anyTraced || (curTrace && curStep === -1 && hist.length === 1);
+}
+
+/* ---------------- Events ---------------- */
+$("btnLoad").addEventListener("click", loadProgram);
+$("btnNext").addEventListener("click", function(){ stopPlay(); nextStep(); render(); });
+$("btnNextInstr").addEventListener("click", nextInstr);
+$("btnPrev").addEventListener("click", prevStep);
+$("btnPlay").addEventListener("click", play);
+$("btnPause").addEventListener("click", function(){ stopPlay(); render(); });
+$("btnReset").addEventListener("click", resetMachine);
+/* The Registers used / Memory used block (.two) lives in the right column in the Full view and moves under the wire table of #fInfo in the Datapath view */
+var twoBlock = document.querySelector(".two"), twoHome = twoBlock.parentNode;
+$("btnFocus").addEventListener("click", function(){
+  var on = !document.body.classList.contains("focus");
+  document.body.classList.toggle("focus", on);
+  $("btnFocus").textContent = on ? "⤢ Full view (Esc)" : "⤢ Datapath view";
+  if (on) $("fInfo").appendChild(twoBlock); else twoHome.appendChild(twoBlock);
+  render();
+});
+$("prog").addEventListener("click", function(ev){
+  var bp = ev.target.closest(".bp");
+  if (bp){ var a = parseInt(bp.getAttribute("data-addr"),10); if (breakpoints[a]) delete breakpoints[a]; else breakpoints[a] = true; render(); return; }
+  var ln = ev.target.closest(".ln");
+  if (ln && ln.getAttribute("data-kind") !== "label") runTo(parseInt(ln.getAttribute("data-addr"),10));
+});
+document.addEventListener("keydown", function(ev){
+  var tag = (ev.target && ev.target.tagName) ? ev.target.tagName.toLowerCase() : "";
+  if (tag === "input" && ev.target.type === "range"){ ev.target.blur(); }
+  else if (tag === "textarea" || tag === "input" || tag === "select") return;
+  if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  if (ev.key === " " || ev.key === "ArrowRight"){ ev.preventDefault(); $("btnNext").click(); }
+  else if (ev.key === "ArrowLeft"){ ev.preventDefault(); $("btnPrev").click(); }
+  else if (ev.key === "Enter"){ ev.preventDefault(); $("btnNextInstr").click(); }
+  else if (ev.key === "r" || ev.key === "R"){ ev.preventDefault(); resetMachine(); }
+  else if (ev.key === "Escape" && document.body.classList.contains("focus")){ $("btnFocus").click(); }
+});
+
+$("footer").textContent = "© 2026 Dr. Bhargav Bhatkalkar, KFSCIS, Florida International University · v" + C.VERSION;
+
+/* ---------------- Resizable columns ---------------- */
+/* Drag the handle between two columns; double-click resets. Widths are remembered by the browser (localStorage) when it allows it. */
+(function(){
+  var main = document.querySelector(".main");
+  var LIMITS = {"--left":[170,640], "--right":[200,700], "--leftf":[170,640]};
+  function store(key, val){ try{ if (val === null) localStorage.removeItem("dp_" + key); else localStorage.setItem("dp_" + key, val); }catch(e){} }
+  function load(key){ try{ return localStorage.getItem("dp_" + key); }catch(e){ return null; } }
+  Object.keys(LIMITS).forEach(function(k){ var v = parseFloat(load(k)); if (v >= LIMITS[k][0] && v <= LIMITS[k][1]) main.style.setProperty(k, v + "px"); });
+  function varFor(side){ return side === "l" ? (document.body.classList.contains("focus") ? "--leftf" : "--left") : "--right"; }
+  function setup(id, side){
+    var g = $(id), key, startX, startW;
+    g.addEventListener("pointerdown", function(ev){
+      key = varFor(side); startX = ev.clientX;
+      startW = parseFloat(getComputedStyle(main).getPropertyValue(key)) || 0;
+      g.classList.add("drag"); g.setPointerCapture(ev.pointerId); ev.preventDefault();
+    });
+    g.addEventListener("pointermove", function(ev){
+      if (!g.classList.contains("drag")) return;
+      var dx = ev.clientX - startX, w = side === "l" ? startW + dx : startW - dx;
+      w = Math.max(LIMITS[key][0], Math.min(LIMITS[key][1], w));
+      main.style.setProperty(key, Math.round(w) + "px");
+    });
+    function end(){ if (!g.classList.contains("drag")) return; g.classList.remove("drag"); store(key, parseFloat(getComputedStyle(main).getPropertyValue(key))); }
+    g.addEventListener("pointerup", end); g.addEventListener("pointercancel", end);
+    g.addEventListener("dblclick", function(){ var k = varFor(side); main.style.removeProperty(k); store(k, null); });
+  }
+  setup("gutL", "l"); setup("gutR", "r");
+})();
+$("code").value = DEMO;
+loadProgram();
+})();
+</script>
+</body>
+</html>

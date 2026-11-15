@@ -1,0 +1,2665 @@
+<!DOCTYPE html>
+<!--
+    32-bit Binary Calculator - Version 1.0 (October 2026)
+    Created by Dr. Bhargav Bhatkalkar
+    (c) 2026 Bhargav Bhatkalkar. All rights reserved.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<meta name="author" content="Dr. Bhargav Bhatkalkar">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<link rel="icon" href="data:,">
+<title>32-bit Binary Calculator</title>
+<style>
+    :root
+    {
+        --bg: #0f1115;
+        --lcd: #dde6e2;
+        --lcd-active: #c3d2cc;
+        --lcd-text: #1b2a4a;
+        --lcd-dim: #4a5a6c;
+        --key: #2a2f37;
+        --key-hex: #383e47;
+        --key-logic: #2f4256;
+        --key-shift: #41395a;
+        --key-fn: #3b5e51;
+        --key-base: #4a3d24;
+        --key-text: #ffffff;
+        --yellow: #f2c230;
+        --gold: #d8b45a;
+        --gold-soft: #c9a54c;
+        --ac: #c84a14;
+        --del: #a8432a;
+        --red: #b42318;
+        --mono: Consolas, Menlo, "Courier New", monospace;
+    }
+
+    *
+    {
+        box-sizing: border-box;
+    }
+
+    html, body
+    {
+        margin: 0;
+        height: 100%;
+        background: var(--bg);
+        color: var(--key-text);
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    }
+
+    body
+    {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 6px 8px;
+        padding: max(6px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));  /* keep clear of a phone notch and home bar */
+        height: 100vh;
+        height: 100dvh;
+    }
+
+    /* ---------- Main column (phones and tablets in portrait) ---------- */
+    .calc
+    {
+        width: 100%;
+        max-width: 520px;
+        max-height: 1000px;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .title
+    {
+        flex: none;
+        margin: 0;
+        text-align: center;
+        color: var(--gold);
+        font-size: clamp(15px, 4.6vw, 22px);
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        line-height: 1.25;
+    }
+
+    /* ---------- Display ---------- */
+    .display
+    {
+        flex: 1 1 0;
+        display: flex;
+        flex-direction: column;
+        background: var(--lcd);
+        color: var(--lcd-text);
+        border-radius: 12px;
+        padding: 6px 9px 8px;
+    }
+
+    .status
+    {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font: 12px var(--mono);
+        color: var(--lcd-dim);
+        min-height: 24px;
+    }
+
+    .status .grow
+    {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .status .flag
+    {
+        color: var(--red);
+        font-weight: bold;
+        white-space: nowrap;
+    }
+
+    .help-btn
+    {
+        border: 1px solid var(--lcd-dim);
+        background: transparent;
+        color: var(--lcd-text);
+        border-radius: 12px;
+        height: 24px;
+        padding: 0 10px;
+        font: bold 13px system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+
+    .expr
+    {
+        font: 13px var(--mono);
+        color: var(--lcd-dim);
+        min-height: 18px;
+        text-align: right;
+        overflow-wrap: anywhere;
+        margin-top: 2px;
+    }
+
+    .main-area
+    {
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        border-bottom: 1px solid #b9c6c1;
+        margin-bottom: 4px;
+        min-height: 40px;
+    }
+
+    .main
+    {
+        display: flex;
+        align-items: baseline;
+        justify-content: flex-end;
+        gap: 8px;
+        font-family: var(--mono);
+        font-weight: bold;
+        text-align: right;
+        padding-bottom: 2px;
+    }
+
+    .main .tag
+    {
+        flex: none;
+        font-size: 13px;
+        font-weight: bold;
+        color: var(--lcd-dim);
+        letter-spacing: 0.5px;
+    }
+
+    .main .num
+    {
+        overflow-wrap: anywhere;
+        word-break: break-all;
+        line-height: 1.15;
+    }
+
+    .num.xl
+    {
+        font-size: clamp(26px, min(9vw, 5.6vh), 48px);
+    }
+
+    .num.l
+    {
+        font-size: clamp(20px, min(6.4vw, 4.4vh), 36px);
+    }
+
+    .num.m
+    {
+        font-size: clamp(15px, min(4.6vw, 3.4vh), 26px);
+    }
+
+    .num.s
+    {
+        font-size: clamp(10px, 2.9vw, 18px);
+    }
+
+    /* ---------- Binary column view ---------- */
+    .colview
+    {
+        display: none;
+        margin-top: 4px;
+        font-family: var(--mono);
+    }
+
+    .colview.show
+    {
+        display: block;
+    }
+
+    .cv-row
+    {
+        display: flex;
+        align-items: center;
+    }
+
+    .cv-l
+    {
+        flex: none;
+        width: clamp(30px, 8.5vw, 44px);
+        font-weight: bold;
+        text-align: center;
+        font-size: clamp(11px, 3vw, 16px);
+    }
+
+    .cv-carry .cv-l
+    {
+        font-size: clamp(9px, 2.5vw, 12px);
+        font-weight: normal;
+        color: #a14a12;
+        text-align: left;
+    }
+
+    .cv-bits
+    {
+        flex: 1;
+        display: flex;
+        gap: 6px;
+    }
+
+    .cv-nib
+    {
+        flex: 1;
+        min-width: 0;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .cv-d
+    {
+        text-align: center;
+        font-size: clamp(10px, 2.9vw, 16px);
+        font-weight: bold;
+        line-height: 1.25;
+    }
+
+    .cv-ruler .cv-d
+    {
+        font-size: 9px;
+        font-weight: normal;
+        color: var(--lcd-dim);
+        text-align: left;
+        overflow: visible;
+        white-space: nowrap;
+    }
+
+    .cv-ruler .cv-d.end
+    {
+        text-align: right;
+    }
+
+    .cv-carry .cv-d
+    {
+        color: #a14a12;
+        font-size: clamp(9px, 2.4vw, 13px);
+    }
+
+    .cv-res
+    {
+        border-top: 2px solid var(--lcd-text);
+        margin-top: 1px;
+    }
+
+    .cv-note
+    {
+        font-size: clamp(9px, 3vw, 11px);
+        white-space: nowrap;
+        color: var(--lcd-dim);
+        text-align: right;
+        margin-top: 2px;
+    }
+
+    /* ---------- Value rows ---------- */
+    .row
+    {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        border: 0;
+        border-left: 4px solid transparent;
+        background: transparent;
+        color: var(--lcd-text);
+        padding: 3px 6px;
+        border-radius: 6px;
+        cursor: pointer;
+        text-align: left;
+        font-family: inherit;
+    }
+
+    .row:disabled
+    {
+        cursor: default;
+    }
+
+    .row.active
+    {
+        background: var(--lcd-active);
+        border-left-color: var(--lcd-text);
+    }
+
+    .row .lbl
+    {
+        font: bold 12px var(--mono);
+        color: var(--lcd-dim);
+        white-space: nowrap;
+        margin-right: 8px;
+    }
+
+    .row .val
+    {
+        font-family: var(--mono);
+        font-weight: bold;
+        font-size: clamp(14px, min(4.3vw, 2.4vh), 20px);
+        text-align: right;
+        overflow-wrap: anywhere;
+        word-break: break-all;
+    }
+
+    .bits-wrap
+    {
+        border-left: 4px solid transparent;
+        border-radius: 6px;
+        padding: 3px 6px 2px;
+    }
+
+    .bits-wrap.active
+    {
+        background: var(--lcd-active);
+        border-left-color: var(--lcd-text);
+    }
+
+    .bits-head
+    {
+        border: 0;
+        background: transparent;
+        padding: 5px 8px 5px 0;            /* a bigger tap area ... */
+        margin: -5px 0;                    /* ... without moving anything */
+        font: bold 12px var(--mono);
+        color: var(--lcd-dim);
+        cursor: pointer;
+    }
+
+    .bits-line
+    {
+        display: flex;
+        gap: 7px;
+        margin-top: 3px;
+    }
+
+    .nibble
+    {
+        flex: 1;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 2px;
+    }
+
+    .bit
+    {
+        border: 0;
+        background: #f4f7f6;
+        color: var(--lcd-text);
+        border-radius: 3px;
+        width: 100%;
+        padding: 2px 0 1px;
+        cursor: pointer;
+        font-family: var(--mono);
+        line-height: 1.1;
+    }
+
+    .bit:disabled
+    {
+        cursor: default;
+    }
+
+    .bit .b
+    {
+        display: block;
+        font-size: clamp(13px, min(3.8vw, 2.2vh), 18px);
+        font-weight: bold;
+    }
+
+    .bit .i
+    {
+        display: block;
+        font-size: 9px;
+        color: var(--lcd-dim);
+    }
+
+    .bit.one
+    {
+        background: var(--lcd-text);
+        color: #ffffff;
+    }
+
+    .bit.one .i
+    {
+        color: #c9d4e3;
+    }
+
+    /* ---------- Keys ---------- */
+    .keypad
+    {
+        flex: 1.35 1 0;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .grid
+    {
+        display: grid;
+        gap: 5px;
+    }
+
+    .g-base
+    {
+        flex: 1;
+        grid-template-columns: repeat(6, 1fr);
+    }
+
+    .g-fn
+    {
+        flex: 3;
+        grid-template-columns: repeat(5, 1fr);
+        grid-template-rows: repeat(3, 1fr);
+    }
+
+    .g-hex
+    {
+        flex: 1;
+        grid-template-columns: repeat(6, 1fr);
+    }
+
+    .g-num
+    {
+        flex: 4.8;
+        grid-template-columns: repeat(4, 1fr);
+        grid-template-rows: repeat(4, 1fr);
+    }
+
+    .key
+    {
+        border: 0;
+        border-radius: 10px;
+        background: var(--key);
+        color: var(--key-text);
+        min-height: 30px;
+        font-size: clamp(13px, min(3.9vw, 2.3vh), 18px);
+        font-weight: 600;
+        font-family: inherit;
+        cursor: pointer;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+        user-select: none;
+        -webkit-user-select: none;
+        transition: filter 0.08s;
+    }
+
+    .row, .bit, .bits-head, .help-btn
+    {
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+        user-select: none;
+        -webkit-user-select: none;
+    }
+
+    .key:active:not(:disabled)
+    {
+        filter: brightness(1.45);
+    }
+
+    .key:disabled
+    {
+        opacity: 0.28;
+        cursor: default;
+    }
+
+    .key.big
+    {
+        min-height: 36px;
+        font-size: clamp(18px, min(5.6vw, 3.4vh), 28px);
+    }
+
+    .key.mono
+    {
+        font-family: var(--mono);
+    }
+
+    .key.hex
+    {
+        background: var(--key-hex);
+        font-size: clamp(15px, min(4.6vw, 2.7vh), 22px);
+    }
+
+    .key.logic
+    {
+        background: var(--key-logic);
+    }
+
+    .key.shift
+    {
+        background: var(--key-shift);
+        font-family: var(--mono);
+    }
+
+    .key.fn
+    {
+        background: var(--key-fn);
+    }
+
+    .key.base
+    {
+        background: var(--key-base);
+    }
+
+    .key.base.active
+    {
+        background: var(--yellow);
+        color: #111111;
+    }
+
+    .key.ac
+    {
+        background: var(--ac);
+    }
+
+    .key.del
+    {
+        background: var(--del);
+    }
+
+    .key.eq
+    {
+        background: var(--yellow);
+        color: #111111;
+    }
+
+    .key.pending
+    {
+        box-shadow: inset 0 0 0 3px var(--yellow);
+    }
+
+    .key.undo
+    {
+        background: var(--key-hex);
+    }
+
+    .key.wide
+    {
+        grid-column: span 2;
+    }
+
+    /* Clear focus outline for keyboard users */
+    .key:focus-visible, .row:focus-visible, .bit:focus-visible, .bits-head:focus-visible,
+    .help-btn:focus-visible, .close:focus-visible
+    {
+        outline: 3px solid var(--yellow);
+        outline-offset: 2px;
+    }
+
+    .row:focus-visible, .bit:focus-visible, .bits-head:focus-visible, .help-btn:focus-visible, .close:focus-visible
+    {
+        outline-color: #9a6b00;
+    }
+
+    .made-by
+    {
+        flex: none;
+        text-align: center;
+        font-size: 12px;
+        letter-spacing: 0.3px;
+        color: var(--gold-soft);
+        padding: 8px 0 4px;
+    }
+
+    .made-by .nw
+    {
+        white-space: nowrap;
+    }
+
+    .sr-only
+    {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+    }
+
+    /* ---------- Help ---------- */
+    .overlay
+    {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.65);
+        display: none;
+        justify-content: center;
+        align-items: flex-start;
+        padding: 16px;
+        padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+        overflow-y: auto;
+        z-index: 10;
+    }
+
+    .overlay.open
+    {
+        display: flex;
+    }
+
+    .help
+    {
+        background: #ffffff;
+        color: #1b2a4a;
+        border-radius: 12px;
+        max-width: 580px;
+        width: 100%;
+        padding: 16px 18px;
+        font-size: 15px;
+        line-height: 1.45;
+    }
+
+    .help h2
+    {
+        margin: 0 0 8px;
+        font-size: 19px;
+    }
+
+    .help h3
+    {
+        margin: 14px 0 4px;
+        font-size: 16px;
+    }
+
+    .help table
+    {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 14px;
+    }
+
+    .help td
+    {
+        border-top: 1px solid #e2e8f0;
+        padding: 4px 6px;
+        vertical-align: top;
+    }
+
+    .help td:first-child
+    {
+        font-family: var(--mono);
+        font-weight: bold;
+        white-space: nowrap;
+    }
+
+    .help .credit
+    {
+        margin: 16px 0 0;
+        padding-top: 8px;
+        border-top: 1px solid #e2e8f0;
+        font-size: 13px;
+        color: #4a5a6c;
+        text-align: center;
+    }
+
+    .help .copy
+    {
+        margin: 2px 0 0;
+        font-size: 12px;
+        color: #4a5a6c;
+        text-align: center;
+    }
+
+    .help .close
+    {
+        float: right;
+        border: 0;
+        background: #1b2a4a;
+        color: #ffffff;
+        border-radius: 8px;
+        padding: 6px 12px;
+        font-size: 14px;
+        cursor: pointer;
+    }
+
+    /* ---------- Very narrow phones: keep the status line on one line ---------- */
+    @media (max-width: 359px)
+    {
+        .status
+        {
+            font-size: 10.5px;
+            gap: 5px;
+        }
+
+        .help-btn
+        {
+            padding: 0 7px;
+            font-size: 12px;
+        }
+    }
+
+    /* ---------- Small phones: tighter spacing ---------- */
+    @media (max-height: 720px) and (orientation: portrait)
+    {
+        body
+        {
+            padding: 4px 6px;
+            padding: max(4px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));  /* keep clear of a phone notch and home bar */
+        }
+
+        .calc
+        {
+            gap: 4px;
+        }
+
+        .display
+        {
+            padding: 4px 8px 6px;
+        }
+
+        .status
+        {
+            min-height: 20px;
+        }
+
+        .expr
+        {
+            min-height: 15px;
+            font-size: 12px;
+        }
+
+        .row
+        {
+            padding: 1px 6px;
+        }
+
+        .keypad, .grid
+        {
+            gap: 4px;
+        }
+
+        .made-by
+        {
+            padding: 4px 0 1px;
+            font-size: 11px;
+        }
+
+        .title
+        {
+            font-size: 15px;
+        }
+
+        .main-area
+        {
+            min-height: 28px;
+        }
+
+        .bits-wrap
+        {
+            padding: 2px 6px 1px;
+        }
+
+        .bit
+        {
+            padding: 1px 0 0;
+        }
+    }
+
+    /* ---------- Short phones (640 px tall or less): slightly smaller keys so all fits ---------- */
+    @media (max-height: 640px) and (orientation: portrait)
+    {
+        .key
+        {
+            min-height: 27px;
+        }
+
+        .key.big
+        {
+            min-height: 30px;
+        }
+
+        .calc, .keypad, .grid
+        {
+            gap: 3px;
+        }
+    }
+
+    /* ---------- Very short phones (such as the first iPhone SE): smaller keys so all fits ---------- */
+    @media (max-height: 600px) and (orientation: portrait)
+    {
+        .key
+        {
+            min-height: 24px;
+        }
+
+        .key.big
+        {
+            min-height: 26px;
+        }
+
+        .calc, .keypad, .grid
+        {
+            gap: 3px;
+        }
+
+        .made-by
+        {
+            padding: 1px 0 3px;
+        }
+    }
+
+    .display.cv-on .main-area
+    {
+        min-height: 0;
+    }
+
+    /* Short phones: while the column view shows, it replaces the bit area (the result row shows the same bits) */
+    @media (max-height: 800px) and (orientation: portrait)
+    {
+        .display.cv-on .bits-wrap
+        {
+            display: none;
+        }
+    }
+
+    /* Very short landscape screens: while the column view shows, it replaces the bit area */
+    @media (orientation: landscape) and (max-height: 375px)
+    {
+        .display.cv-on .bits-wrap
+        {
+            display: none;
+        }
+    }
+
+    /* ---------- Laptops and desktops: display on the left, keys on the right ---------- */
+    @media (min-width: 700px) and (min-height: 561px) and (orientation: landscape)
+    {
+        body
+        {
+            height: auto;
+            min-height: 100vh;
+            min-height: 100dvh;
+            align-items: flex-start;
+            padding: 20px 16px;
+            padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));  /* keep clear of a phone notch and home bar */
+        }
+
+        .calc
+        {
+            max-width: 1000px;
+            height: auto;
+            max-height: none;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto auto 1fr;
+            column-gap: 16px;
+            row-gap: 10px;
+            align-items: start;
+        }
+
+        .title
+        {
+            grid-column: 1 / 3;
+            grid-row: 1;
+            font-size: 24px;
+        }
+
+        .display
+        {
+            grid-column: 1;
+            grid-row: 2;
+        }
+
+        .main-area
+        {
+            min-height: 64px;
+        }
+
+        .num.xl
+        {
+            font-size: clamp(24px, 4.2vw, 38px);
+        }
+
+        .num.l
+        {
+            font-size: clamp(18px, 3.2vw, 30px);
+        }
+
+        .num.m
+        {
+            font-size: clamp(14px, 2.3vw, 22px);
+        }
+
+        .num.s
+        {
+            font-size: clamp(11px, 1.6vw, 15px);
+        }
+
+        .row .val
+        {
+            font-size: 17px;
+        }
+
+        .bit .b
+        {
+            font-size: 15px;
+        }
+
+        .cv-d
+        {
+            font-size: clamp(11px, 1.6vw, 14px);
+        }
+
+        .cv-carry .cv-d
+        {
+            font-size: 12px;
+        }
+
+        .cv-l
+        {
+            font-size: 15px;
+        }
+
+        .keypad
+        {
+            grid-column: 2;
+            grid-row: 2 / span 2;
+        }
+
+        .key
+        {
+            min-height: 44px;
+            font-size: 15px;
+        }
+
+        .key.big
+        {
+            min-height: 54px;
+            font-size: 22px;
+        }
+
+        .key.hex
+        {
+            font-size: 18px;
+        }
+
+        .made-by
+        {
+            grid-column: 1;
+            grid-row: 3;
+            align-self: start;
+            padding-top: 6px;
+        }
+    }
+
+    /* ---------- Tablets held upright (iPad and similar): a wider and taller column ---------- */
+    @media (orientation: portrait) and (min-width: 700px) and (min-height: 960px)
+    {
+        .calc
+        {
+            max-width: 640px;
+            max-height: 1120px;
+        }
+
+        .title
+        {
+            font-size: 26px;
+        }
+
+        .status
+        {
+            font-size: 15px;
+            min-height: 32px;
+        }
+
+        .help-btn
+        {
+            height: 30px;
+            font-size: 16px;
+        }
+
+        .expr
+        {
+            font-size: 16px;
+            min-height: 22px;
+        }
+
+        .num.xl
+        {
+            font-size: 60px;
+        }
+
+        .num.l
+        {
+            font-size: 44px;
+        }
+
+        .num.m
+        {
+            font-size: 32px;
+        }
+
+        .num.s
+        {
+            font-size: 22px;
+        }
+
+        .tag
+        {
+            font-size: 16px;
+        }
+
+        .row
+        {
+            padding: 5px 8px;
+        }
+
+        .row .lbl
+        {
+            font-size: 15px;
+        }
+
+        .row .val
+        {
+            font-size: 26px;
+        }
+
+        .bits-head
+        {
+            font-size: 15px;
+        }
+
+        .bit .b
+        {
+            font-size: 22px;
+        }
+
+        .bit .i
+        {
+            font-size: 11px;
+        }
+
+        .cv-d
+        {
+            font-size: 19px;
+        }
+
+        .cv-carry .cv-d
+        {
+            font-size: 15px;
+        }
+
+        .cv-l
+        {
+            font-size: 19px;
+        }
+
+        .cv-note
+        {
+            font-size: 14px;
+        }
+
+        .key
+        {
+            font-size: 20px;
+        }
+
+        .key.big
+        {
+            font-size: 32px;
+        }
+
+        .key.hex
+        {
+            font-size: 24px;
+        }
+
+        .made-by
+        {
+            font-size: 14px;
+        }
+    }
+
+    /* ---------- Big laptop and desktop screens: the whole calculator grows in proportion ---------- */
+    @media (orientation: landscape) and (min-height: 800px) and (min-width: 1250px)
+    {
+        .calc
+        {
+            zoom: 1.15;
+        }
+    }
+
+    @media (orientation: landscape) and (min-height: 880px) and (min-width: 1350px)
+    {
+        .calc
+        {
+            zoom: 1.25;
+        }
+    }
+
+    @media (orientation: landscape) and (min-height: 1000px) and (min-width: 1500px)
+    {
+        .calc
+        {
+            zoom: 1.4;
+        }
+    }
+
+    @media (orientation: landscape) and (min-height: 1150px) and (min-width: 1750px)
+    {
+        .calc
+        {
+            zoom: 1.6;
+        }
+    }
+
+    @media (orientation: landscape) and (min-height: 1300px) and (min-width: 2100px)
+    {
+        .calc
+        {
+            zoom: 1.9;
+        }
+    }
+
+    @media (orientation: landscape) and (min-height: 1500px) and (min-width: 2400px)
+    {
+        .calc
+        {
+            zoom: 2.2;
+        }
+    }
+
+    @media (orientation: landscape) and (min-height: 1800px) and (min-width: 2900px)
+    {
+        .calc
+        {
+            zoom: 2.6;
+        }
+    }
+
+    @media (orientation: landscape) and (min-height: 2000px) and (min-width: 3300px)
+    {
+        .calc
+        {
+            zoom: 3.3;
+        }
+    }
+
+    /* ---------- Phones in landscape: display on the left, keys on the right ---------- */
+    @media (orientation: landscape) and (max-height: 560px), (orientation: landscape) and (max-width: 699px)
+    {
+        body
+        {
+            padding: 4px 8px;
+            padding: max(4px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));  /* keep clear of a phone notch and home bar */
+        }
+
+        .calc
+        {
+            max-width: 1000px;
+            max-height: none;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto 1fr auto;
+            column-gap: 12px;
+            row-gap: 3px;
+        }
+
+        .title
+        {
+            grid-column: 1;
+            grid-row: 1;
+            font-size: 14px;
+        }
+
+        .display
+        {
+            grid-column: 1;
+            grid-row: 2;
+            padding: 3px 8px 4px;
+            min-height: 0;
+        }
+
+        .status
+        {
+            min-height: 18px;
+        }
+
+        .expr
+        {
+            min-height: 14px;
+            font-size: 11px;
+        }
+
+        .main-area
+        {
+            min-height: 30px;
+        }
+
+        .num.xl
+        {
+            font-size: 26px;
+        }
+
+        .num.l
+        {
+            font-size: 21px;
+        }
+
+        .num.m
+        {
+            font-size: clamp(13px, 2.6vw, 16px);
+        }
+
+        .num.s
+        {
+            font-size: clamp(8.5px, 1.6vw, 12px);
+        }
+
+        .row
+        {
+            padding: 0 6px;
+        }
+
+        .row .val
+        {
+            font-size: 14px;
+        }
+
+        .bit .b
+        {
+            font-size: 12px;
+        }
+
+        .bit .i
+        {
+            font-size: 8px;
+        }
+
+        .cv-d
+        {
+            font-size: clamp(8.5px, 1.6vw, 11px);
+            line-height: 1.1;
+        }
+
+        .cv-carry .cv-d
+        {
+            font-size: clamp(8px, 1.5vw, 10px);
+        }
+
+        .cv-note
+        {
+            font-size: clamp(8.5px, 1.6vw, 11px);
+        }
+
+        .keypad
+        {
+            grid-column: 2;
+            grid-row: 1 / span 3;
+            gap: 4px;
+        }
+
+        .grid
+        {
+            gap: 4px;
+        }
+
+        .key
+        {
+            min-height: 24px;
+            font-size: 13px;
+        }
+
+        .key.big
+        {
+            min-height: 28px;
+            font-size: 17px;
+        }
+
+        .key.hex
+        {
+            font-size: 14px;
+        }
+
+        .made-by
+        {
+            grid-column: 1;
+            grid-row: 3;
+            font-size: 11px;
+            padding: 1px 0 0;
+        }
+    }
+
+    /* ---------- Landscape windows narrower than 740 px: keep the status line on one line ---------- */
+    @media (orientation: landscape) and (max-width: 739px)
+    {
+        .status
+        {
+            font-size: 10.5px;
+            gap: 5px;
+        }
+
+        .help-btn
+        {
+            padding: 0 7px;
+            font-size: 12px;
+        }
+    }
+
+    /* Landscape screens narrower than 620 px: the overflow note moves to its own line */
+    @media (orientation: landscape) and (max-width: 619px)
+    {
+        .status
+        {
+            flex-wrap: wrap;
+        }
+
+        .status .flag:not(:empty)
+        {
+            order: 3;
+            flex: 1 0 100%;
+            text-align: right;
+            line-height: 1.1;
+        }
+    }
+
+    /* ---------- Narrow but tall landscape windows (such as half a laptop screen): larger text ---------- */
+    @media (orientation: landscape) and (min-width: 640px) and (max-width: 699px) and (min-height: 561px)
+    {
+        .title
+        {
+            font-size: 18px;
+        }
+
+        .expr
+        {
+            font-size: 12px;
+        }
+
+        .num.xl
+        {
+            font-size: 32px;
+        }
+
+        .num.l
+        {
+            font-size: 25px;
+        }
+
+        .num.m
+        {
+            font-size: clamp(16px, 2.7vw, 18px);
+        }
+
+        .row .val
+        {
+            font-size: 16px;
+        }
+
+        .bit .b
+        {
+            font-size: 14px;
+        }
+
+        .bit .i
+        {
+            font-size: 9px;
+        }
+
+        .key
+        {
+            font-size: 15px;
+        }
+
+        .key.big
+        {
+            font-size: 22px;
+        }
+
+        .key.hex
+        {
+            font-size: 17px;
+        }
+
+        .made-by
+        {
+            font-size: 12px;
+            padding: 4px 0 0;
+        }
+    }
+
+    /* ---------- Wide but short landscape windows (a laptop at 125% or 150% browser zoom): larger text ---------- */
+    @media (orientation: landscape) and (min-height: 360px) and (max-height: 560px) and (min-width: 900px)
+    {
+        .title
+        {
+            font-size: 18px;
+        }
+
+        .status
+        {
+            font-size: 12px;
+        }
+
+        .expr
+        {
+            font-size: 12px;
+        }
+
+        .num.xl
+        {
+            font-size: 34px;
+        }
+
+        .num.l
+        {
+            font-size: 27px;
+        }
+
+        .num.m
+        {
+            font-size: 20px;
+        }
+
+        .num.s
+        {
+            font-size: 14px;
+        }
+
+        .row .val
+        {
+            font-size: 16px;
+        }
+
+        .bit .b
+        {
+            font-size: 14px;
+        }
+
+        .bit .i
+        {
+            font-size: 9px;
+        }
+
+        .cv-d
+        {
+            font-size: 13px;
+        }
+
+        .cv-carry .cv-d
+        {
+            font-size: 11px;
+        }
+
+        .cv-l
+        {
+            font-size: 14px;
+        }
+
+        .cv-note
+        {
+            font-size: 11px;
+        }
+
+        .key
+        {
+            font-size: 15px;
+        }
+
+        .key.big
+        {
+            font-size: 22px;
+        }
+
+        .key.hex
+        {
+            font-size: 17px;
+        }
+
+        .made-by
+        {
+            font-size: 12px;
+        }
+    }
+
+    /* ---------- Very narrow landscape windows (under 544 px wide): one column, scroll down if needed ---------- */
+    @media (orientation: landscape) and (max-width: 543px)
+    {
+        body
+        {
+            height: auto;
+            min-height: 100dvh;
+            align-items: flex-start;
+        }
+
+        .calc
+        {
+            display: flex;
+            flex-direction: column;
+            height: auto;
+            max-height: none;
+            gap: 4px;
+        }
+
+        .display, .keypad
+        {
+            flex: none;
+        }
+
+        .key
+        {
+            min-height: 30px;
+        }
+
+        .key.big
+        {
+            min-height: 34px;
+        }
+
+        .main-area
+        {
+            min-height: 40px;
+        }
+        .status
+        {
+            font-size: 12px;
+            flex-wrap: nowrap;
+        }
+
+        .status .flag:not(:empty)
+        {
+            order: 0;
+            flex: none;
+        }
+
+        .expr
+        {
+            font-size: 12px;
+        }
+
+        .num.l
+        {
+            font-size: clamp(20px, 6.4vw, 36px);
+        }
+
+        .num.m
+        {
+            font-size: clamp(15px, 4.6vw, 26px);
+        }
+
+        .num.s
+        {
+            font-size: clamp(10px, 2.9vw, 18px);
+        }
+
+        .row .val
+        {
+            font-size: 16px;
+        }
+
+        .bit .b
+        {
+            font-size: 14px;
+        }
+
+        .cv-d
+        {
+            font-size: clamp(10px, 2.9vw, 16px);
+        }
+
+        .cv-carry .cv-d
+        {
+            font-size: clamp(9px, 2.4vw, 13px);
+        }
+
+        .cv-l
+        {
+            font-size: clamp(11px, 3vw, 16px);
+        }
+
+        .cv-note
+        {
+            font-size: clamp(9px, 3vw, 11px);
+        }
+
+        .key
+        {
+            font-size: 15px;
+        }
+
+        .key.big
+        {
+            font-size: 20px;
+        }
+
+        .key.hex
+        {
+            font-size: 17px;
+        }
+    }
+</style>
+</head>
+<body>
+<main class="calc">
+
+    <h1 class="title">32-bit Binary Calculator</h1>
+
+    <section class="display" aria-label="Display">
+        <div class="status">
+            <span id="stBase" class="grow"></span>
+            <span id="stFlag" class="flag" role="status"></span>
+            <button id="helpBtn" class="help-btn" title="How to use the calculator" aria-haspopup="dialog">? Help</button>
+        </div>
+        <div id="expr" class="expr"></div>
+        <div id="colView" class="colview" role="img"></div>
+        <div class="main-area">
+            <div id="main" class="main" role="status" aria-live="polite" aria-atomic="true"><span id="mainTag" class="tag">HEX</span><span id="mainNum" class="num xl">0</span></div>
+        </div>
+
+        <button class="row" data-base="16" data-signed="1"><span class="lbl">HEX</span><span id="rHex" class="val"></span></button>
+        <button class="row" data-base="10" data-signed="1"><span class="lbl">DEC signed</span><span id="rDecS" class="val"></span></button>
+        <button class="row" data-base="10" data-signed="0"><span class="lbl">DEC unsigned</span><span id="rDecU" class="val"></span></button>
+        <button class="row" data-base="8" data-signed="1"><span class="lbl">OCT</span><span id="rOct" class="val"></span></button>
+
+        <div id="bitsWrap" class="bits-wrap">
+            <button id="binHead" class="bits-head" data-base="2" data-signed="1">BIN (tap a bit to flip it)</button>
+            <div id="bitsHi" class="bits-line"></div>
+            <div id="bitsLo" class="bits-line"></div>
+        </div>
+    </section>
+
+    <section class="keypad" aria-label="Keys">
+        <div class="grid g-base">
+            <button class="key base" data-base="16" title="Type in hexadecimal">HEX</button>
+            <button class="key base" data-base="10" title="Type in decimal">DEC</button>
+            <button class="key base" data-base="8" title="Type in octal">OCT</button>
+            <button class="key base" data-base="2" title="Type in binary">BIN</button>
+            <button class="key undo" id="undoKey" title="Undo last step (Ctrl+Z or Cmd+Z)" aria-label="Undo last step">Undo</button>
+            <button class="key undo" id="redoKey" title="Redo last undone step (Ctrl+Y or Cmd+Shift+Z)" aria-label="Redo last undone step">Redo</button>
+        </div>
+
+        <div class="grid g-fn">
+            <button class="key logic" data-op="AND" title="Bitwise AND">AND</button>
+            <button class="key logic" data-op="OR" title="Bitwise OR">OR</button>
+            <button class="key logic" data-op="XOR" title="Bitwise XOR">XOR</button>
+            <button class="key logic" data-un="NOT" title="Flip all 32 bits">NOT</button>
+            <button class="key fn" data-un="NEG" title="Two's complement negate (0 - value)">NEG</button>
+
+            <button class="key logic" data-op="NAND" title="NOT of AND">NAND</button>
+            <button class="key logic" data-op="NOR" title="NOT of OR">NOR</button>
+            <button class="key logic" data-op="XNOR" title="NOT of XOR">XNOR</button>
+            <button class="key fn" data-un="SE16" title="Sign-extend the low 16 bits">SE16</button>
+            <button class="key fn" data-un="ZE16" title="Zero-extend the low 16 bits">ZE16</button>
+
+            <button class="key shift" data-op="SLL" title="Shift left logical">sll</button>
+            <button class="key shift" data-op="SRL" title="Shift right logical">srl</button>
+            <button class="key shift" data-op="SRA" title="Shift right arithmetic">sra</button>
+            <button class="key fn" data-un="SE8" title="Sign-extend the low 8 bits">SE8</button>
+            <button class="key fn" data-un="ZE8" title="Zero-extend the low 8 bits">ZE8</button>
+        </div>
+
+        <div class="grid g-hex">
+            <button class="key hex mono" data-d="A">A</button>
+            <button class="key hex mono" data-d="B">B</button>
+            <button class="key hex mono" data-d="C">C</button>
+            <button class="key hex mono" data-d="D">D</button>
+            <button class="key hex mono" data-d="E">E</button>
+            <button class="key hex mono" data-d="F">F</button>
+        </div>
+
+        <div class="grid g-num">
+            <button class="key big mono" data-d="7">7</button>
+            <button class="key big mono" data-d="8">8</button>
+            <button class="key big mono" data-d="9">9</button>
+            <button class="key big ac" id="acKey" title="Clear all" aria-label="AC, clear all">AC</button>
+
+            <button class="key big mono" data-d="4">4</button>
+            <button class="key big mono" data-d="5">5</button>
+            <button class="key big mono" data-d="6">6</button>
+            <button class="key big del" id="delKey" title="Delete last digit" aria-label="Delete last digit">&#9003;</button>
+
+            <button class="key big mono" data-d="1">1</button>
+            <button class="key big mono" data-d="2">2</button>
+            <button class="key big mono" data-d="3">3</button>
+            <button class="key big logic" data-op="ADD" title="Add" aria-label="Add">+</button>
+
+            <button class="key big mono wide" data-d="0">0</button>
+            <button class="key big logic" data-op="SUB" title="Subtract" aria-label="Subtract">&minus;</button>
+            <button class="key big eq" id="eqKey" title="Equals" aria-label="Equals">=</button>
+        </div>
+    </section>
+
+    <div class="made-by"><span class="nw">© 2026 Dr. Bhargav Bhatkalkar, KFSCIS,</span> <span class="nw">Florida International University &middot; v1</span></div>
+
+</main>
+
+<div id="overlay" class="overlay">
+    <div class="help" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+        <button id="closeHelp" class="close">Close</button>
+        <h2 id="helpTitle">How to use</h2>
+        <p>All values are 32 bits, the same size as a MIPS register. HEX, DEC, OCT, and BIN always show the same value.</p>
+
+        <h3>Choose the input base</h3>
+        <p>Tap HEX, DEC, OCT, or BIN, or tap a row in the display. The selected base key turns yellow. Only the digits of that base can be typed. The small word before the result (HEX, DEC, OCT, or BIN) shows the base of the number.</p>
+        <p>To type a negative decimal number, type the number and press NEG. DEC signed accepts up to 2147483647. For larger decimal numbers, tap the DEC unsigned row (up to 4294967295).</p>
+        <p>To get &minus;2147483648 (the most negative 32-bit value), type 80000000 in HEX, or tap the DEC unsigned row and type 2147483648.</p>
+
+        <h3>Two-value operations</h3>
+        <p>Type the first value, press the operation, type the second value, then press =. If you press = without a second value, the first value is used again (5 + = gives 10).</p>
+        <table>
+            <tr><td>AND OR XOR</td><td>Bitwise AND, OR, XOR</td></tr>
+            <tr><td>NAND NOR XNOR</td><td>NOT of AND, OR, XOR</td></tr>
+            <tr><td>+ &minus;</td><td>Add and subtract. The result wraps to 32 bits. "Signed overflow" shows when the signed result of the last operation does not fit in 32 bits.</td></tr>
+        </table>
+
+        <h3>Binary column view</h3>
+        <p>In BIN, after + or &minus; and =, the display shows the work in columns: the first number, the second number, and the result, with bit numbers (31, 27, ..., 3, 0) on top. For +, the "carry" row on top shows the carry into each bit, and the line under the result shows the carry into bit 31 and the carry out of bit 31.</p>
+        <p>Signed overflow happens when the carry into bit 31 and the carry out of bit 31 are different.</p>
+
+        <h3>Shifts (like MIPS)</h3>
+        <p>Type the value, press the shift, type the shift amount, then press =. The shift amount is always typed in decimal (0 to 31), as in MIPS: sll $t0, $t1, 4.</p>
+        <table>
+            <tr><td>sll</td><td>Shift left logical. 0s fill from the right.</td></tr>
+            <tr><td>srl</td><td>Shift right logical. 0s fill from the left.</td></tr>
+            <tr><td>sra</td><td>Shift right arithmetic. Copies of bit 31 (the sign bit) fill from the left.</td></tr>
+        </table>
+
+        <h3>Multiply and divide with shifts</h3>
+        <p>Shifting by n bits multiplies or divides by 2, 4, 8, 16, ... (2 to the power n). Example: n = 3 means &times; 8 or &divide; 8. MIPS has no "sla": sll works for both signed and unsigned values.</p>
+        <table>
+            <tr><td>sll n</td><td>Multiply, signed or unsigned. 5 sll 3 = 40 (5 &times; 8). &minus;5 sll 2 = &minus;20 (&minus;5 &times; 4). Bits shifted out of bit 31 are lost.</td></tr>
+            <tr><td>srl n</td><td>Divide an unsigned value. 0xF0000000 srl 4 = 0x0F000000 (4026531840 &divide; 16 = 251658240).</td></tr>
+            <tr><td>sra n</td><td>Divide a signed value. &minus;64 sra 3 = &minus;8 (&minus;64 &divide; 8).</td></tr>
+        </table>
+        <p>Warning 1: do not use srl on a negative value. &minus;64 srl 3 = 536870904, not &minus;8.</p>
+        <p>Warning 2: if a negative value does not divide exactly, sra rounds down, not toward zero. &minus;7 sra 1 = &minus;4, but MIPS div gives &minus;7 &divide; 2 = &minus;3. Word addresses and word offsets divide exactly by 4, so this does not affect them.</p>
+        <p>Tip: to type &minus;5, tap the DEC signed row, type 5, then press NEG.</p>
+
+        <h3>One-value operations (act right away)</h3>
+        <table>
+            <tr><td>NOT</td><td>Flip all 32 bits</td></tr>
+            <tr><td>NEG</td><td>Two's complement negate (0 &minus; value)</td></tr>
+            <tr><td>SE16</td><td>Sign-extend the low 16 bits to 32 bits (like the immediate of addi, lw, sw, and like lh)</td></tr>
+            <tr><td>ZE16</td><td>Zero-extend the low 16 bits to 32 bits (like the immediate of andi, ori, xori, and like lhu)</td></tr>
+            <tr><td>SE8</td><td>Sign-extend the low 8 bits to 32 bits (like lb)</td></tr>
+            <tr><td>ZE8</td><td>Zero-extend the low 8 bits to 32 bits (like lbu)</td></tr>
+        </table>
+        <p>Two's complement by hand: NEG is the same as NOT and then + 1. Try it: type 5, press NOT, then press + 1 =. The result is &minus;5, the same as 5 NEG.</p>
+
+        <h3>Other keys</h3>
+        <table>
+            <tr><td>AC</td><td>Clear everything</td></tr>
+            <tr><td>&#9003;</td><td>Delete the last typed digit</td></tr>
+            <tr><td>Undo</td><td>Go back one step. Press it again to go back more steps (up to 50). It can also undo AC.</td></tr>
+            <tr><td>Redo</td><td>Go forward again after Undo, one step at a time. Use Undo and Redo to step back and forth through your work. A new change after Undo clears the Redo steps.</td></tr>
+            <tr><td>Bits</td><td>Tap any bit in the BIN area to flip it between 0 and 1</td></tr>
+            <tr><td>? Help</td><td>Open this help page</td></tr>
+        </table>
+
+        <h3>Computer keyboard</h3>
+        <table>
+            <tr><td>0-9 A-F</td><td>Digits</td></tr>
+            <tr><td>Enter or =</td><td>Equals</td></tr>
+            <tr><td>Backspace</td><td>Delete last digit</td></tr>
+            <tr><td>Esc</td><td>AC (when help is open, Esc closes help)</td></tr>
+            <tr><td>Ctrl+Z</td><td>Undo (Cmd+Z on a Mac)</td></tr>
+            <tr><td>Ctrl+Y</td><td>Redo (or Ctrl+Shift+Z; Cmd+Shift+Z on a Mac)</td></tr>
+            <tr><td>&amp; | ^ ~</td><td>AND, OR, XOR, NOT</td></tr>
+            <tr><td>+ -</td><td>Add, subtract</td></tr>
+            <tr><td>&lt; &gt;</td><td>sll, srl</td></tr>
+            <tr><td>Tab</td><td>Move between keys. Enter or Space presses the selected key. Type any shortcut key to go back to normal typing, where Enter is =.</td></tr>
+        </table>
+
+        <p class="copy">&copy; 2026 Dr. Bhargav Bhatkalkar, KFSCIS, Florida International University &middot; v1</p>
+    </div>
+</div>
+
+<script>
+/* ===== ENGINE START ===== */
+const BIN_OPS =
+{
+    AND:  (a, b) => (a & b) >>> 0,
+    OR:   (a, b) => (a | b) >>> 0,
+    XOR:  (a, b) => (a ^ b) >>> 0,
+    NAND: (a, b) => (~(a & b)) >>> 0,
+    NOR:  (a, b) => (~(a | b)) >>> 0,
+    XNOR: (a, b) => (~(a ^ b)) >>> 0,
+    ADD:  (a, b) => (a + b) >>> 0,
+    SUB:  (a, b) => (a - b) >>> 0,
+    SLL:  (a, s) => (a << s) >>> 0,
+    SRL:  (a, s) => a >>> s,
+    SRA:  (a, s) => ((a | 0) >> s) >>> 0
+};
+
+const UN_OPS =
+{
+    NOT:  (a) => (~a) >>> 0,
+    NEG:  (a) => (-(a | 0)) >>> 0,
+    SE16: (a) => ((a << 16) >> 16) >>> 0,
+    ZE16: (a) => (a & 0xFFFF) >>> 0,
+    SE8:  (a) => ((a << 24) >> 24) >>> 0,
+    ZE8:  (a) => (a & 0xFF) >>> 0
+};
+
+function signedOverflow(op, a, b)
+{
+    const sa = a | 0;
+    const sb = b | 0;
+    let s;
+    if (op === "ADD")
+    {
+        s = sa + sb;
+    }
+    else if (op === "SUB")
+    {
+        s = sa - sb;
+    }
+    else
+    {
+        return false;
+    }
+    return s > 2147483647 || s < -2147483648;
+}
+
+// Carries for a + b. carries[i] = carry INTO bit i (i = 0..31); carries[32] = carry OUT of bit 31.
+function addCarries(a, b)
+{
+    const carries = [0];
+    let c = 0;
+    for (let i = 0; i < 32; i++)
+    {
+        const s = ((a >>> i) & 1) + ((b >>> i) & 1) + c;
+        c = s >> 1;
+        carries.push(c);
+    }
+    return carries;
+}
+
+function toHex(v)
+{
+    return v.toString(16).toUpperCase().padStart(8, "0");
+}
+
+function toOct(v)
+{
+    return v.toString(8).padStart(11, "0");
+}
+
+function toBin(v)
+{
+    return v.toString(2).padStart(32, "0");
+}
+
+function toDecS(v)
+{
+    return String(v | 0);
+}
+
+function toDecU(v)
+{
+    return String(v >>> 0);
+}
+/* ===== ENGINE END ===== */
+
+const OP_LABEL =
+{
+    AND: "AND", OR: "OR", XOR: "XOR", NAND: "NAND", NOR: "NOR", XNOR: "XNOR",
+    ADD: "+", SUB: "−", SLL: "sll", SRL: "srl", SRA: "sra"
+};
+const SHIFTS = ["SLL", "SRL", "SRA"];
+const MAX_LEN = { 16: 8, 10: 10, 8: 11, 2: 32 };
+const BASE_NAME = { 16: "HEX", 10: "DEC", 8: "OCT", 2: "BIN" };
+
+const st =
+{
+    value: 0,         // value on screen (uint32)
+    entry: "",        // digits being typed
+    acc: null,        // first operand
+    op: null,         // pending two-value operation
+    awaiting: false,  // op pressed, second value not typed yet
+    shamt: "",        // shift amount being typed (decimal)
+    base: 16,
+    signed: true,     // DEC main display signed or unsigned
+    expr: "",
+    flag: "",
+    cv: null          // last binary + or - for the column view: { op, a, b, r }
+};
+
+const $ = (id) => document.getElementById(id);
+
+function inShamtMode()
+{
+    return st.op !== null && SHIFTS.includes(st.op);
+}
+
+function allowedDigit(d, base)
+{
+    const v = parseInt(d, 16);
+    return v < base;
+}
+
+function groupBin(s)
+{
+    return s.replace(/(.{4})(?=.)/g, "$1 ");
+}
+
+function fmtExpr(v)
+{
+    if (st.base === 16)
+    {
+        return "0x" + toHex(v);
+    }
+    if (st.base === 10)
+    {
+        return st.signed ? toDecS(v) : toDecU(v);
+    }
+    if (st.base === 8)
+    {
+        return toOct(v);
+    }
+    return groupBin(toBin(v));
+}
+
+function fmtMain(v)
+{
+    if (st.base === 10)
+    {
+        return st.signed ? toDecS(v) : toDecU(v);
+    }
+    return v.toString(st.base).toUpperCase();
+}
+
+function pressDigit(d)
+{
+    if (inShamtMode())
+    {
+        if (!/[0-9]/.test(d))
+        {
+            return;
+        }
+        let cand = (st.shamt === "0" ? "" : st.shamt) + d;
+        if (parseInt(cand, 10) > 31)
+        {
+            return;
+        }
+        st.shamt = cand;
+        st.awaiting = false;
+        render();
+        return;
+    }
+    if (!allowedDigit(d, st.base))
+    {
+        return;
+    }
+    let cand = (st.entry === "0" ? "" : st.entry) + d;
+    if (cand.length > MAX_LEN[st.base])
+    {
+        return;
+    }
+    const v = parseInt(cand, st.base);
+    if (v > 4294967295)
+    {
+        return;
+    }
+    if (st.base === 10 && st.signed && v > 2147483647)
+    {
+        return;            // DEC signed input stops at the largest positive value
+    }
+    if (st.op === null && st.entry === "")
+    {
+        st.expr = "";      // a new number after a result
+    }
+    if (st.op !== null && st.entry === "")
+    {
+        st.expr = fmtExpr(st.acc) + " " + OP_LABEL[st.op];   // a new second value
+    }
+    st.entry = cand;
+    st.value = v >>> 0;
+    st.awaiting = false;
+    st.flag = "";
+    st.cv = null;
+    render();
+}
+
+function pressDelete()
+{
+    if (inShamtMode())
+    {
+        st.shamt = st.shamt.slice(0, -1);
+        if (st.shamt === "")
+        {
+            st.awaiting = true;
+        }
+        render();
+        return;
+    }
+    if (st.entry === "")
+    {
+        if (st.cv !== null)
+        {
+            st.cv = null;                  // any key ends the column view
+            render();
+        }
+        return;
+    }
+    st.entry = st.entry.slice(0, -1);
+    st.value = st.entry === "" ? 0 : (parseInt(st.entry, st.base) >>> 0);
+    render();
+}
+
+function pressAC()
+{
+    st.value = 0;
+    st.entry = "";
+    st.acc = null;
+    st.op = null;
+    st.awaiting = false;
+    st.shamt = "";
+    st.expr = "";
+    st.flag = "";
+    st.cv = null;
+    render();
+}
+
+function compute(op, a, b)
+{
+    st.flag = signedOverflow(op, a, b) ? "Signed overflow" : "";
+    return BIN_OPS[op](a, b);
+}
+
+function secondOperand()
+{
+    return inShamtMode() ? parseInt(st.shamt, 10) : st.value;
+}
+
+function secondText(b)
+{
+    return inShamtMode() ? String(b) : fmtExpr(b);
+}
+
+function pressOp(op)
+{
+    st.cv = null;
+    if (inShamtMode() && st.shamt === "")
+    {
+        st.op = op;              // change the pending shift to another op
+        st.expr = fmtExpr(st.acc) + " " + OP_LABEL[op];
+        render();
+        return;
+    }
+    if (st.op !== null && !st.awaiting)
+    {
+        const b = secondOperand();
+        st.acc = compute(st.op, st.acc, b);
+    }
+    else if (st.op === null)
+    {
+        st.acc = st.value;
+        st.flag = "";
+    }
+    st.op = op;
+    st.awaiting = true;
+    st.entry = "";
+    st.shamt = "";
+    st.value = st.acc;
+    st.expr = fmtExpr(st.acc) + " " + OP_LABEL[op];
+    render();
+}
+
+function pressEquals()
+{
+    if (st.op === null)
+    {
+        return;
+    }
+    if (inShamtMode() && st.shamt === "")
+    {
+        return;
+    }
+    const op = st.op;
+    const a = st.acc;
+    const b = secondOperand();
+    const text = fmtExpr(a) + " " + OP_LABEL[op] + " " + secondText(b) + " =";
+    const r = compute(op, a, b);
+    st.value = r;
+    st.acc = null;
+    st.op = null;
+    st.awaiting = false;
+    st.entry = "";
+    st.shamt = "";
+    st.expr = text;
+    st.cv = (op === "ADD" || op === "SUB") ? { op, a, b, r } : null;
+    render();
+}
+
+function pressUnary(name)
+{
+    if (inShamtMode())
+    {
+        return;
+    }
+    const old = st.value;
+    st.value = UN_OPS[name](old);
+    st.entry = "";
+    st.flag = "";
+    st.cv = null;
+    const part = name + "(" + fmtExpr(old) + ")";
+    if (st.op !== null)
+    {
+        st.awaiting = false;
+        st.expr = fmtExpr(st.acc) + " " + OP_LABEL[st.op] + " " + part;
+    }
+    else
+    {
+        st.expr = part + " =";
+    }
+    render();
+}
+
+function setBase(base, signed)
+{
+    if (inShamtMode())
+    {
+        return;
+    }
+    if (base === st.base && (base !== 10 || signed === st.signed))
+    {
+        return;                            // already selected: nothing changes
+    }
+    st.base = base;
+    if (base === 10)
+    {
+        st.signed = signed;
+    }
+    st.entry = "";
+    st.cv = null;
+    if (st.op !== null)
+    {
+        st.expr = fmtExpr(st.acc) + " " + OP_LABEL[st.op];
+    }
+    else
+    {
+        st.expr = "";
+    }
+    render();
+}
+
+function flipBit(i)
+{
+    if (inShamtMode())
+    {
+        return;
+    }
+    st.value = (st.value ^ (1 << i)) >>> 0;
+    st.entry = "";
+    st.flag = "";
+    st.cv = null;
+    if (st.op !== null)
+    {
+        st.awaiting = false;
+        st.expr = fmtExpr(st.acc) + " " + OP_LABEL[st.op];   // the new second value is on the main line
+    }
+    else
+    {
+        st.expr = "";
+    }
+    render();
+}
+
+/* ---------- Build the bit grid ---------- */
+function buildBits()
+{
+    const lines = [$("bitsHi"), $("bitsLo")];
+    for (let line = 0; line < 2; line++)
+    {
+        for (let n = 0; n < 4; n++)
+        {
+            const nib = document.createElement("div");
+            nib.className = "nibble";
+            for (let k = 0; k < 4; k++)
+            {
+                const idx = 31 - (line * 16 + n * 4 + k);
+                const b = document.createElement("button");
+                b.className = "bit";
+                b.dataset.bit = idx;
+                const sb = document.createElement("span");
+                sb.className = "b";
+                sb.setAttribute("aria-hidden", "true");
+                sb.textContent = "0";
+                const si = document.createElement("span");
+                si.className = "i";
+                si.setAttribute("aria-hidden", "true");
+                si.textContent = String(idx);
+                b.appendChild(sb);
+                b.appendChild(si);
+                b.addEventListener("click", () => act(() => flipBit(idx)));
+                nib.appendChild(b);
+            }
+            lines[line].appendChild(nib);
+        }
+    }
+}
+
+/* ---------- Build the binary column view ---------- */
+const CV_ROWS = ["ruler", "carry", "a", "b", "res"];
+
+function buildColView()
+{
+    const cv = $("colView");
+    for (const name of CV_ROWS)
+    {
+        const row = document.createElement("div");
+        row.className = "cv-row cv-" + name;
+        row.dataset.row = name;
+        const l = document.createElement("div");
+        l.className = "cv-l";
+        row.appendChild(l);
+        const bits = document.createElement("div");
+        bits.className = "cv-bits";
+        for (let n = 0; n < 8; n++)
+        {
+            const nib = document.createElement("div");
+            nib.className = "cv-nib";
+            for (let k = 0; k < 4; k++)
+            {
+                const d = document.createElement("div");
+                d.className = "cv-d";
+                d.dataset.bit = 31 - (n * 4 + k);
+                nib.appendChild(d);
+            }
+            bits.appendChild(nib);
+        }
+        row.appendChild(bits);
+        cv.appendChild(row);
+    }
+    const note = document.createElement("div");
+    note.className = "cv-note";
+    note.id = "cvNote";
+    cv.appendChild(note);
+
+    // ruler: bit number on the first column of each group, and 0 on the last column
+    cv.querySelectorAll(".cv-ruler .cv-d").forEach((d) =>
+    {
+        const bit = +d.dataset.bit;
+        if (bit % 4 === 3)
+        {
+            d.textContent = String(bit);
+        }
+        else if (bit === 0)
+        {
+            d.textContent = "0";
+            d.classList.add("end");
+        }
+    });
+}
+
+function fillCvRow(name, label, bitsText)
+{
+    const row = $("colView").querySelector('[data-row="' + name + '"]');
+    row.querySelector(".cv-l").textContent = label;
+    row.querySelectorAll(".cv-d").forEach((d) =>
+    {
+        const bit = +d.dataset.bit;
+        const ch = bitsText === null ? " " : bitsText[31 - bit];
+        d.textContent = ch === " " ? "" : ch;
+    });
+}
+
+function renderColView()
+{
+    const view = $("colView");
+    const show = st.cv !== null && st.base === 2;
+    view.classList.toggle("show", show);
+    document.querySelector(".display").classList.toggle("cv-on", show);
+    $("expr").style.display = show ? "none" : "";
+    if (!show)
+    {
+        view.removeAttribute("aria-label");
+        return;
+    }
+    const { op, a, b, r } = st.cv;
+    const isAdd = op === "ADD";
+    fillCvRow("a", "", toBin(a));
+    fillCvRow("b", isAdd ? "+" : "−", toBin(b));
+    fillCvRow("res", "=", toBin(r));
+    const carryRow = view.querySelector('[data-row="carry"]');
+    carryRow.style.display = isAdd ? "" : "none";
+    let note = "";
+    if (isAdd)
+    {
+        const c = addCarries(a, b);
+        let text = "";
+        for (let bit = 31; bit >= 0; bit--)
+        {
+            text += bit === 0 ? " " : String(c[bit]);
+        }
+        fillCvRow("carry", "carry", text);
+        note = "Carry into bit 31: " + c[31] + " · Carry out of bit 31: " + c[32];
+    }
+    $("cvNote").textContent = note;
+    view.setAttribute("aria-label", "Column view: " + groupBin(toBin(a)) + (isAdd ? " plus " : " minus ") +
+        groupBin(toBin(b)) + " equals " + groupBin(toBin(r)) + (note ? ". " + note : ""));
+}
+
+/* ---------- Render ---------- */
+function render()
+{
+    const v = st.value;
+    const shamtMode = inShamtMode();
+
+    // status line
+    if (shamtMode)
+    {
+        $("stBase").textContent = "Shift amount 0-31";
+    }
+    else if (st.base === 10)
+    {
+        $("stBase").textContent = "Input: DEC " + (st.signed ? "signed" : "unsigned");
+    }
+    else
+    {
+        $("stBase").textContent = "Input: " + BASE_NAME[st.base];
+    }
+    $("stFlag").textContent = st.flag;
+
+    // expression, column view, and main value
+    $("expr").textContent = st.expr;
+    renderColView();
+
+    let tag;
+    let text;
+    if (shamtMode)
+    {
+        tag = "shamt";
+        text = st.shamt === "" ? "_" : st.shamt;
+    }
+    else if (st.entry !== "")
+    {
+        tag = BASE_NAME[st.base];
+        text = st.entry.toUpperCase();
+    }
+    else
+    {
+        tag = BASE_NAME[st.base];
+        text = fmtMain(v);
+    }
+    if (st.base === 2 && !shamtMode)
+    {
+        text = text.replace(/\B(?=(.{4})+$)/g, " ");     // group BIN digits by 4 from the right
+    }
+    $("mainTag").textContent = tag;
+    const num = $("mainNum");
+    num.textContent = text;
+    const len = text.length;
+    num.className = "num " + (len <= 10 ? "xl" : len <= 16 ? "l" : len <= 24 ? "m" : "s");
+
+    // rows
+    $("rHex").textContent = "0x" + toHex(v).replace(/(.{4})(?=.)/, "$1 ");
+    $("rDecS").textContent = toDecS(v);
+    $("rDecU").textContent = toDecU(v);
+    $("rOct").textContent = toOct(v);
+
+    document.querySelectorAll(".row").forEach((r) =>
+    {
+        const b = +r.dataset.base;
+        const s = r.dataset.signed === "1";
+        const active = b === st.base && (b !== 10 || s === st.signed);
+        r.classList.toggle("active", active);
+        r.setAttribute("aria-pressed", active ? "true" : "false");
+        r.disabled = shamtMode;
+    });
+    $("bitsWrap").classList.toggle("active", st.base === 2);
+    $("binHead").setAttribute("aria-pressed", st.base === 2 ? "true" : "false");
+    $("binHead").disabled = shamtMode;
+
+    const bits = toBin(v);
+    document.querySelectorAll(".bit").forEach((b) =>
+    {
+        const idx = +b.dataset.bit;
+        const one = bits[31 - idx] === "1";
+        b.classList.toggle("one", one);
+        b.firstChild.textContent = one ? "1" : "0";
+        b.setAttribute("aria-label", "bit " + idx + ", value " + (one ? "1" : "0") + ", tap to flip");
+        b.disabled = shamtMode;
+    });
+
+    // keys
+    document.querySelectorAll(".key.base").forEach((k) =>
+    {
+        const active = +k.dataset.base === st.base;
+        k.classList.toggle("active", active);
+        k.setAttribute("aria-pressed", active ? "true" : "false");
+        k.disabled = shamtMode;
+    });
+    document.querySelectorAll("[data-d]").forEach((k) =>
+    {
+        const d = k.dataset.d;
+        k.disabled = shamtMode ? !/[0-9]/.test(d) : !allowedDigit(d, st.base);
+    });
+    document.querySelectorAll("[data-un]").forEach((k) =>
+    {
+        k.disabled = shamtMode;
+    });
+    document.querySelectorAll("[data-op]").forEach((k) =>
+    {
+        k.classList.toggle("pending", st.op === k.dataset.op && (st.awaiting || shamtMode));
+    });
+    $("eqKey").disabled = st.op === null || (shamtMode && st.shamt === "");
+    $("undoKey").disabled = undoStack.length === 0;
+    $("redoKey").disabled = redoStack.length === 0;
+    const focused = document.activeElement;
+    if (focused && focused.tagName === "BUTTON" && focused.disabled)
+    {
+        focused.blur();                    // a dimmed key must not keep the focus
+    }
+}
+
+/* ---------- Undo and Redo (stacks of saved states, up to 50 steps each) ---------- */
+const UNDO_MAX = 50;
+const undoStack = [];
+const redoStack = [];
+
+function snapshot()
+{
+    return JSON.stringify(st);
+}
+
+// Save a state on a stack, keeping at most UNDO_MAX states.
+function pushLimited(stack, state)
+{
+    stack.push(state);
+    if (stack.length > UNDO_MAX)
+    {
+        stack.shift();
+    }
+}
+
+// Run one user action. If it changed anything, save the state from before it,
+// so Undo can go back. A new action also ends the Redo history.
+function act(fn)
+{
+    const before = snapshot();
+    fn();
+    if (snapshot() !== before)
+    {
+        pushLimited(undoStack, before);
+        redoStack.length = 0;
+        render();
+    }
+}
+
+// Move one step between the two stacks: Undo takes from undoStack, Redo from redoStack.
+function stepHistory(from, to)
+{
+    if (from.length === 0)
+    {
+        return;
+    }
+    pushLimited(to, snapshot());
+    Object.assign(st, JSON.parse(from.pop()));
+    render();
+}
+
+function pressUndo()
+{
+    stepHistory(undoStack, redoStack);
+}
+
+function pressRedo()
+{
+    stepHistory(redoStack, undoStack);
+}
+
+/* ---------- Help box ---------- */
+function openHelp()
+{
+    $("overlay").classList.add("open");
+    $("closeHelp").focus();
+}
+
+function closeHelp(byKeyboard)
+{
+    $("overlay").classList.remove("open");
+    if (byKeyboard)
+    {
+        $("helpBtn").focus();              // keyboard users continue from the Help button
+    }
+    else
+    {
+        if (document.activeElement)
+        {
+            document.activeElement.blur(); // after a mouse or touch close, Enter is "=" again
+        }
+    }
+}
+
+/* ---------- Events ---------- */
+document.querySelectorAll("[data-d]").forEach((k) => k.addEventListener("click", () => act(() => pressDigit(k.dataset.d))));
+document.querySelectorAll("[data-op]").forEach((k) => k.addEventListener("click", () => act(() => pressOp(k.dataset.op))));
+document.querySelectorAll("[data-un]").forEach((k) => k.addEventListener("click", () => act(() => pressUnary(k.dataset.un))));
+document.querySelectorAll(".key.base").forEach((k) => k.addEventListener("click", () => act(() => setBase(+k.dataset.base, st.signed))));
+document.querySelectorAll(".row").forEach((r) => r.addEventListener("click", () => act(() => setBase(+r.dataset.base, r.dataset.signed === "1"))));
+$("binHead").addEventListener("click", () => act(() => setBase(2, st.signed)));
+$("acKey").addEventListener("click", () => act(pressAC));
+$("delKey").addEventListener("click", () => act(pressDelete));
+$("eqKey").addEventListener("click", () => act(pressEquals));
+$("undoKey").addEventListener("click", pressUndo);
+$("redoKey").addEventListener("click", pressRedo);
+$("helpBtn").addEventListener("click", openHelp);
+$("closeHelp").addEventListener("click", (e) => closeHelp(e.detail === 0));
+$("overlay").addEventListener("click", (e) =>
+{
+    if (e.target === $("overlay"))
+    {
+        closeHelp(false);
+    }
+});
+
+// After a mouse or touch click, move focus away from the button, so that
+// Enter and Space from the keyboard never repeat the last clicked key.
+// Keyboard users (Tab) keep the focus, so Enter or Space presses the selected key.
+document.querySelector(".calc").addEventListener("click", (e) =>
+{
+    const btn = e.target.closest("button");
+    if (btn && e.detail > 0)
+    {
+        btn.blur();
+    }
+});
+
+document.addEventListener("keydown", (e) =>
+{
+    // Undo: Ctrl+Z (Cmd+Z on a Mac). Redo: Ctrl+Y, or Ctrl+Shift+Z (Cmd+Shift+Z on a Mac).
+    const cmd = (e.ctrlKey || e.metaKey) && !e.altKey;
+    const key = (e.key || "").toLowerCase();
+    const isUndo = cmd && !e.shiftKey && key === "z";
+    const isRedo = cmd && ((e.shiftKey && key === "z") || (e.ctrlKey && !e.shiftKey && key === "y"));
+    if ((isUndo || isRedo) && !$("overlay").classList.contains("open"))
+    {
+        e.preventDefault();
+        if (document.activeElement && document.activeElement.tagName === "BUTTON")
+        {
+            document.activeElement.blur(); // like other shortcuts: Enter is "=" again
+        }
+        if (isUndo)
+        {
+            pressUndo();
+        }
+        else
+        {
+            pressRedo();
+        }
+        return;
+    }
+    // Some keyboards (outside the US) type ~ | ^ & < > with AltGr or Option. Allow those keys.
+    const altSymbol = e.altKey && !e.metaKey && /^[~|^&<>]$/.test(e.key || "");
+    if ((e.ctrlKey || e.metaKey || e.altKey) && !altSymbol)
+    {
+        return;
+    }
+    if ($("overlay").classList.contains("open"))
+    {
+        if (e.key === "Escape")
+        {
+            e.preventDefault();
+            closeHelp(true);
+        }
+        else if (e.key === "Tab")
+        {
+            e.preventDefault();            // keep focus inside the help box
+            $("closeHelp").focus();
+        }
+        else if ((e.key === "Enter" || e.key === " ") && document.activeElement !== $("closeHelp"))
+        {
+            e.preventDefault();            // do not press keys hidden behind the help box
+        }
+        return;
+    }
+    const focused = document.activeElement;
+    const onButton = focused && focused.tagName === "BUTTON";
+    if ((e.key === "Enter" || e.key === " ") && onButton)
+    {
+        return;                            // let the browser press the selected key
+    }
+    if (e.key === " ")
+    {
+        e.preventDefault();
+        return;
+    }
+    const k = e.key;
+    const map = { "&": "AND", "|": "OR", "^": "XOR", "+": "ADD", "-": "SUB", "<": "SLL", ">": "SRL" };
+    if (/^[0-9a-fA-F]$/.test(k))
+    {
+        act(() => pressDigit(k.toUpperCase()));
+    }
+    else if (k === "Enter" || k === "=")
+    {
+        act(pressEquals);
+    }
+    else if (k === "Backspace")
+    {
+        act(pressDelete);
+    }
+    else if (k === "Escape")
+    {
+        act(pressAC);
+    }
+    else if (k === "~")
+    {
+        act(() => pressUnary("NOT"));
+    }
+    else if (map[k])
+    {
+        act(() => pressOp(map[k]));
+    }
+    else
+    {
+        return;
+    }
+    if (onButton)
+    {
+        focused.blur();                    // a typed shortcut ends Tab navigation; Enter is "=" again
+    }
+    e.preventDefault();
+});
+
+buildBits();
+buildColView();
+render();
+</script>
+</body>
+</html>

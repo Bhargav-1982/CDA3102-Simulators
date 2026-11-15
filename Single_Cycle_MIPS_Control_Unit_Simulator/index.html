@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Single-Cycle MIPS Control Unit Simulator</title><style>:root{--bg:#ffffff;--fg:#1d2430;--panel:#fff;--line:#cfd4dc;--muted:#5d6675;--accent:#b85c10;--accent-soft:#fbe9d8;
+ --on:#e2873e;--onsoft:#fff7ef;--ontext:#9a3b05;--off:#8a93a0;--wire:#b9c0ca;--gate:#1c2430;--blue:#1f4fd8;--red:#9a2a10;
+ --font-ui:"Segoe UI",system-ui,-apple-system,sans-serif;--font-mono:Consolas,"JetBrains Mono","Courier New",monospace}
+*{box-sizing:border-box}html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-ui);font-size:13px;padding:6px 12px;display:flex;flex-direction:column;height:100vh;min-height:560px}
+header h1{font-size:17px;margin:0 0 6px}
+.bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+.grp{display:flex;align-items:center;gap:6px}.lbl{color:var(--muted);font-size:12px;font-weight:600}
+.seg{display:flex}.seg button{font:inherit;font-family:var(--font-mono);background:var(--panel);border:1px solid var(--line);margin-left:-1px;padding:4px 9px;cursor:pointer;color:var(--fg)}
+.seg button:first-child{border-radius:6px 0 0 6px;margin-left:0}.seg button:last-child{border-radius:0 6px 6px 0}
+.seg button.sel{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700;position:relative}
+.seg .gap{width:8px}
+.bits6{font-family:var(--font-mono);font-size:14px;width:74px;padding:3px 6px;border:1px solid var(--line);border-radius:6px;letter-spacing:1px}
+.tgl{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);font-weight:600;margin-left:auto}
+.sum{display:flex;gap:4px;margin:6px 0;flex-wrap:wrap}
+.sum .c{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:2px 8px;text-align:center;min-width:70px}
+.sum .c b{display:block;font-size:11px;color:var(--muted);font-weight:600}
+.sum .c span{font-family:var(--font-mono);font-size:15px;font-weight:700}
+.sum .c.one{background:var(--onsoft);border:1px solid var(--on);box-shadow:inset 0 0 0 1px var(--on)}.sum .c.one span{color:var(--ontext)}.sum .c.inst{background:#eef2f7;border-color:#9aa5b4;min-width:200px}
+.sum .sep{width:10px}
+main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,1fr);gap:8px}
+.col{display:grid;grid-template-rows:auto auto;gap:8px;min-height:0;align-content:start}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 8px;min-height:0;min-width:0;display:flex;flex-direction:column}
+.panel h2{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 2px}
+.panel svg{width:100%;height:auto;display:block}
+.big #plaView{flex:1;min-height:0;display:flex}.big #plaView svg{height:100%;max-height:100%}
+svg text{font-family:var(--font-ui)}
+.w{fill:none;stroke:var(--wire);stroke-width:2.2}
+.w.on{stroke:var(--on);stroke-width:5}
+.w.vop.on,.w.in.on{stroke-width:2.4}.w.in.on.hot{stroke-width:5}
+.w.off{stroke:var(--off);stroke-width:2.2}
+.dot{fill:var(--off)}.dot.on{fill:var(--on)}
+.arrow{fill:var(--off)}.arrow.on{fill:var(--on)}
+.gate{fill:#fff;stroke:var(--gate);stroke-width:2.4}.gate.on{fill:var(--onsoft);stroke:var(--on);stroke-width:3.2}
+.bub{fill:#fff;stroke:var(--gate);stroke-width:2}.bub.on{fill:var(--on);stroke:var(--ontext)}.bub.lg{fill:#fff}
+.glbl{font-size:19px;font-weight:700;fill:var(--gate)}.glbl.sm{font-size:15px}svg .glbl.sm{font-size:18px}
+.gname{font-size:21px;font-weight:700;font-style:italic;fill:var(--blue)}
+.gname.on{fill:var(--ontext)}
+.gcode{font-size:19px;font-style:normal;font-weight:400;font-family:var(--font-mono);fill:var(--muted)}
+.inlbl{font-size:19px;font-weight:700;fill:#1b2a4a}
+.bitbox{fill:#fff;stroke:var(--line);stroke-width:1.5}.bitbox.on{fill:var(--onsoft);stroke:var(--on);stroke-width:2}
+.bitval{font-size:18px;font-weight:700;font-family:var(--font-mono)!important;fill:var(--fg)}
+.oname{font-size:20px;font-weight:700;fill:#5a2a1a}
+.oterm{font-size:18px;font-style:italic;fill:var(--muted)}
+.obox{fill:#fff;stroke:var(--line);stroke-width:1.5}.obox.on{fill:var(--onsoft);stroke:var(--on);stroke-width:2.5}
+.val{font-size:19px;font-weight:700;font-family:var(--font-mono)!important;fill:#5d6675}.val.on{fill:var(--ontext)}
+.note{font-size:13px;font-style:italic;fill:var(--muted)}
+.cname{font-size:19px;font-weight:700;fill:#1b2a4a}
+.ceval{font-size:19px;font-family:var(--font-mono)!important;fill:var(--fg)}
+.aluc,.pceq{flex-shrink:0;margin-top:2px;padding:5px 8px;background:#f3f5f8;border-radius:6px;font-size:14px}
+.aluc b,.pceq b{font-family:var(--font-mono)}
+.blk{fill:#eef2f7;stroke:#7a8696;stroke-width:1.6}.blkt{font-size:17px;font-weight:700;fill:var(--fg)}.blkt.mux{fill:#5d6675;font-size:17px}
+.wl{font-size:16px;fill:#6a5a10}.wl.sm{font-size:17px;fill:var(--muted);font-weight:700}
+.nextpc{font-size:17px;font-weight:700;fill:var(--fg)}.nextpc.on{fill:var(--ontext)}
+.bnenote{display:none;padding:1px 6px;background:#fff6d6;border:1px solid #e0c060;border-radius:5px;margin-right:4px;-webkit-box-decoration-break:clone;box-decoration-break:clone}#now{display:inline}
+.bnenote.show{display:inline}
+.dim .w,.dim .dot,.dim .arrow{opacity:.35}
+.romwrap{padding:6px 2px}.romcap{margin:0 0 8px;font-size:14px;color:var(--muted)}
+.rom{border-collapse:collapse;width:100%;font-size:14px}
+.rom th{font-size:12px;color:var(--muted);border-bottom:2px solid var(--line);padding:5px 4px;text-align:center}
+.rom td{border-bottom:1px solid #e6e9ee;padding:7px 4px;text-align:center;font-family:var(--font-mono);font-size:16px}
+.rom td.nm{font-family:var(--font-ui);font-weight:700;text-align:left}
+.rom tr.gapr td{color:var(--muted);font-family:var(--font-ui);font-style:italic;font-size:13px}
+.rom tr.hit td{background:var(--onsoft);font-weight:700}.rom tr.hit td.b1{color:var(--ontext)}
+.now{margin-top:6px;padding:6px 10px;background:var(--accent-soft);border-left:4px solid var(--accent);border-radius:6px;font-size:15px;line-height:1.4;min-height:calc(4.2em + 12px)}
+footer{text-align:center;color:var(--muted);font-size:11px;margin-top:3px}
+body.hide .out-h{visibility:hidden}
+[hidden]{display:none!important}
+.romsel{margin:0 0 10px;padding:8px 10px;background:var(--onsoft);border-radius:6px;font-size:16px}.romsel b{font-family:var(--font-mono)}
+.bitval{fill:var(--fg)}
+.romsel{border:2px solid var(--on)}
+.bits6.bad{border-color:#c62828;background:#fde8e8}
+.sumrow{display:flex;align-items:center;gap:10px;margin:6px 0;flex-wrap:wrap}.sumrow .sum{margin:0}
+.xnote{font-size:13px;color:var(--muted);font-style:italic;width:260px;line-height:1.3;min-height:3.9em;display:flex;align-items:center}.xnote.off{visibility:hidden}
+.legend{font-size:18px;font-style:italic;fill:var(--muted)}
+.direct{font-size:19px;font-style:italic;fill:var(--muted)}
+.cap{font-size:17px;fill:var(--muted);font-style:italic}
+.sum .c span i{font-style:normal}.sum .c span i.d1{color:var(--ontext)}
+.hint{color:#c62828;font-size:12px;font-weight:600;position:absolute;left:0;top:100%;margin-top:2px;white-space:nowrap;background:#fff;padding:0 4px;border-radius:4px;z-index:5}
+.sum .c.one span i{color:var(--fg)}.sum .c.one span i.d1{color:var(--ontext)}
+@media (max-height:820px){header h1{font-size:15px;margin-bottom:3px}.now{font-size:14px;min-height:calc(4.2em + 8px);padding:4px 10px}.sum .c{padding:1px 8px}}
+.bub.soft{fill:var(--onsoft);stroke:var(--on)}
+.big #romView{flex:1;min-height:0;display:flex;flex-direction:column}.big #romView svg{flex:1;min-height:0;height:100%}
+.romsel{margin:2px 0 6px;padding:5px 10px;font-size:15px}
+.bus{fill:none;stroke:#5d6675;stroke-width:5}.busarrow{fill:#5d6675}
+.addrbox{fill:#fff;stroke:#5d6675;stroke-width:2}.addrval{font-size:20px;font-weight:700;font-family:var(--font-mono)!important;fill:var(--fg)}
+.rombox{fill:#fbfcfe;stroke:var(--gate);stroke-width:2.4}.romtitle{font-size:21px;font-weight:700;fill:var(--gate)}
+.romhdr{font-size:19px;font-weight:700;fill:var(--muted)}
+.romrow rect{fill:#fff;stroke:var(--line);stroke-width:1.5}.romrow.hit rect{fill:var(--onsoft);stroke:var(--on);stroke-width:3.2}
+.ra,.rw{font-size:21px;font-family:var(--font-mono)!important;fill:var(--fg)}.rw{letter-spacing:2px}.rn{font-size:21px;font-weight:700;fill:var(--fg)}
+.romrow.hit .rw{font-weight:700}.romrow.hit .rw tspan.d1{fill:var(--ontext)}
+.romgap rect{fill:none;stroke:none}.romgap.hit rect{fill:var(--onsoft);stroke:var(--on);stroke-width:2.4;stroke-dasharray:8 5}
+.gt{font-size:19px;font-style:italic;fill:var(--muted)}.romgap.hit .gt{fill:var(--ontext);font-weight:700}
+.w.x{stroke-dasharray:7 5}
+@media (max-width:1100px){body{height:auto;min-height:0}main{grid-template-columns:1fr}.big #plaView svg,.big #romView svg{height:auto}.big #plaView,.big #romView{display:block}}
+/* Very large screens (4K TV or monitor at 100% scaling): enlarge the text blocks around the diagrams; the diagrams already scale with the window. */
+@media (min-width:2300px) and (min-height:1250px){header,.sumrow,.now,footer,.panel h2,.romsel,.aluc,.pceq{zoom:1.4}}
+@media (min-width:3000px) and (min-height:1650px){header,.sumrow,.now,footer,.panel h2,.romsel,.aluc,.pceq{zoom:1.8}}
+/* Fixed-size signal strip: its height never depends on the instruction or on Hide outputs */
+.sum .c.inst{width:200px;min-width:200px;white-space:nowrap}.sum .c.inst.long span{font-size:12px}
+.sum .c span{display:block;line-height:20px;height:20px}
+/* Gate output values (ALU Decoder, Branch Logic) and final values */
+.val.gv{font-size:17px}
+.fin{font-weight:700;fill:#5d6675}.fin.on{fill:var(--ontext)}
+.pceq b.on{color:var(--ontext)}
+/* Controls with a caption under them */
+.grp.ctl{flex-direction:column;align-items:flex-start;gap:2px}
+.ccap{font-size:11px;color:var(--muted);line-height:1.2}
+/* Two-way switches (Zero, View): pill track with a sliding knob */
+.seg.sw{position:relative;display:inline-grid;grid-template-columns:1fr 1fr;background:#e9edf2;border:1px solid #b8c0cc;border-radius:999px;padding:2px}
+.seg.sw::before{content:"";position:absolute;top:2px;left:2px;width:calc(50% - 2px);height:calc(100% - 4px);border-radius:999px;background:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.35);transition:transform .2s ease}
+.seg.sw.right::before{transform:translateX(100%)}
+.seg.sw button,.seg.sw button:first-child,.seg.sw button:last-child{position:relative;z-index:1;background:transparent;border:0;margin:0;border-radius:999px;padding:3px 14px;color:#5d6675;min-width:46px}
+.seg.sw button.sel{background:transparent;color:#fff}
+.seg.sw button:not(.sel):hover{color:var(--fg);background:rgba(0,0,0,.06)}
+/* Hide outputs: the one black and gold control */
+.hidectl{margin-left:8px}
+.hidebtn{position:relative;display:inline-flex;align-items:center;cursor:pointer;background:#1d1d1d;color:#f2c14e;font-weight:800;font-size:15px;letter-spacing:.02em;padding:6px 18px;border-radius:8px;border:2px solid #f2c14e;box-shadow:0 2px 6px rgba(0,0,0,.3);user-select:none}
+.hidebtn:hover{background:#000}
+.hidebtn input{position:absolute;opacity:0;width:1px;height:1px;margin:0}
+.hidebtn:has(input:focus-visible){outline:2px solid #3b82f6;outline-offset:1px}
+body.hide .hidebtn{background:#f2c14e;color:#1d1d1d;border-color:#1d1d1d}
+.ccap.learn{background:#fff3b0;border:1px solid #e0c060;color:#5a4500;padding:1px 6px;border-radius:4px;font-size:11px;max-width:260px}
+#instBtns button{padding:4px 7px}
+.ccap.learn{max-width:215px}
+.hidebtn{font-size:14px;padding:4px 14px}
+/* Laptop widths: keep the top bar on one row */
+@media (max-width:1420px){.bar{gap:8px;padding:5px 8px}#instBtns button{padding:4px 5px}.bits6{width:66px;padding:3px 4px}.lbl{font-size:11px}.ccap{font-size:10px}.ccap.learn{max-width:190px;font-size:10px}.seg.sw button,.seg.sw button:first-child,.seg.sw button:last-child{padding:3px 10px;min-width:40px}.hidebtn{padding:4px 10px}}
+/* Laptop widths: keep the signal strip and the X note on one row */
+@media (max-width:1420px){.sum .c{min-width:62px;padding:1px 6px}.sum .c.inst{width:160px;min-width:160px}.sum .c.inst.long span{font-size:10.5px}.sum .sep{width:6px}.xnote{width:200px;font-size:11px;line-height:1.2;min-height:3.6em}.sumrow{gap:6px}}
+/* Hide outputs: raised button look, eye icon, space above the label */
+.grp.ctl.hidectl{gap:9px}
+.hidebtn{gap:7px;border-bottom-width:4px;transition:transform .08s,box-shadow .08s}
+.hidebtn:hover{transform:translateY(-1px);box-shadow:0 4px 10px rgba(0,0,0,.35)}
+.hidebtn:active{transform:translateY(2px);border-bottom-width:2px;box-shadow:0 1px 2px rgba(0,0,0,.3)}
+.eye{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round}
+.eye .slash{display:none}body.hide .eye .slash{display:inline}
+.ccap.learn b{font-weight:800}
+.ccap.learn{max-width:255px}
+@media (max-width:1420px){.ccap.learn{max-width:228px}}
+/* Review 2 fixes */
+.bar .grp:has(#opcode){position:relative}
+.aluc,.pceq,.romsel{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:1420px){.aluc,.pceq{font-size:12px;padding:4px 6px}.romsel{font-size:13px}.sum .c.inst{width:168px;min-width:168px}.sum .c.inst.long span{font-size:10px}}
+@media (max-width:1100px){#instBtns{flex-wrap:wrap}.aluc,.pceq,.romsel{white-space:normal}}
+@media (max-height:700px){header h1{font-size:13px;margin:0 0 2px}footer{font-size:10px;margin-top:1px}.now{font-size:13px;margin-top:4px}body{padding-top:3px;padding-bottom:3px}main{gap:6px}.col{gap:6px}}
+/* Wide screens: the "How to learn" label sits beside the Hide outputs button, and the bottom box reserves 2 lines */
+@media (min-width:1700px){.grp.ctl.hidectl{flex-direction:row;align-items:center;gap:10px}.hidectl .ccap.learn{max-width:240px}}
+@media (min-width:1700px){.now{min-height:calc(2.8em + 12px)}}
+.eye{pointer-events:none}
+.hidebtn input{position:absolute;left:0;top:0;width:100%;height:100%;opacity:0;margin:0;cursor:pointer;z-index:2}
+/* Focus: a panel header button makes one diagram larger; the other two stay visible in a narrow column */
+.ph{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.focusbtn{font:inherit;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border:1px solid #b8c0cc;border-radius:999px;background:#f3f5f8;color:#1d2430;cursor:pointer;line-height:1.4}
+.focusbtn:hover{background:#e6eaf0}
+@media (min-width:1101px){
+ main.focus{grid-template-columns:minmax(0,2fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"big s1" "big s2"}
+ main.focus .col{display:contents}
+ main.focus .panel{min-height:0;overflow:hidden}
+ main.focus .panel > svg{flex:1 1 0;min-height:0;width:100%;height:100%}
+ main.focus-alu #panelAlu{grid-area:big} main.focus-alu #panelPla{grid-area:s1} main.focus-alu #panelBr{grid-area:s2}
+ main.focus-br #panelBr{grid-area:big} main.focus-br #panelPla{grid-area:s1} main.focus-br #panelAlu{grid-area:s2}
+}
+@media (max-width:1100px){.focusbtn{display:none}}
+@media (min-width:2300px) and (min-height:1250px){.focusbtn{zoom:1.4}}
+@media (min-width:3000px) and (min-height:1650px){.focusbtn{zoom:1.8}}
+.ph h2{margin:0}.ph{margin:0 0 2px;min-height:16px}
+.focusbtn{padding:0 7px;font-size:11px;line-height:14px;height:16px}
+@media (min-width:1101px){main.focus .aluc,main.focus .pceq,main.focus .romsel{white-space:normal;line-height:1.35;min-height:calc(2.7em + 8px)}}
+@media (min-width:1101px){main.focus .romsel{height:calc(2.7em + 8px);box-sizing:content-box;padding-top:3px;padding-bottom:3px;min-height:0}}
+@media (min-width:1101px){main.focus .aluc,main.focus .pceq{height:2.7em;min-height:0;box-sizing:content-box}}
+</style></head><body>
+<header><h1>Single-Cycle MIPS Control Unit Simulator</h1>
+<div class="bar">
+ <div class="grp"><span class="lbl">Instruction</span>
+  <div class="seg" id="instBtns" role="group" aria-label="Instruction"></div></div>
+ <div class="grp"><label class="lbl" for="opcode" title="Instr[31:26]">Opcode</label><input id="opcode" class="bits6" maxlength="6" value="100011" autocomplete="off" spellcheck="false" aria-label="Opcode, Instr[31:26], 6 bits" title="Type 6 bits (0 or 1): Instr[31:26]">
+  <label class="lbl" for="funct" title="Instr[5:0]">funct</label><input id="funct" class="bits6" maxlength="6" value="000000" autocomplete="off" spellcheck="false" aria-label="funct, Instr[5:0], 6 bits" title="Type 6 bits (0 or 1): Instr[5:0]. For I-type instructions these are the low 6 bits of the immediate."><span class="hint" id="bitHint" role="alert" hidden>Type exactly 6 bits (0 or 1).</span></div>
+ <div class="grp ctl" title="Zero is the ALU flag: 1 when the ALU result is 0. For beq and bne the ALU subtracts, so Zero = 1 means the two registers are equal."><div class="grp"><span class="lbl">Zero (ALU flag)</span><div class="seg sw" id="zeroSeg" role="group" aria-label="Zero (ALU flag)"><button data-z="0">0</button><button data-z="1">1</button></div></div><span class="ccap">Click to change. 1 = ALU result is 0</span></div>
+ <div class="grp ctl"><div class="grp"><span class="lbl">View</span><div class="seg sw" id="viewSeg" role="group" aria-label="View"><button data-v="pla">PLA</button><button data-v="rom">ROM</button></div></div><span class="ccap">Click to change: gates or memory</span></div>
+ <div class="grp ctl hidectl"><label class="hidebtn" title="Click to hide or show all outputs"><input type="checkbox" id="hide" aria-label="Hide outputs"><svg class="eye" viewBox="0 0 24 24" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3.2"/><path class="slash" d="M3 3l18 18"/></svg><span id="hideTxt">Hide outputs</span></label><span class="ccap learn"><b>How to learn:</b> click to hide, predict every signal, then click again to check.</span></div>
+</div></header>
+<div class="sumrow"><section class="sum" id="sum"></section><div class="xnote off" id="xnote"></div></div>
+<main>
+ <div class="panel big" id="panelPla"><div class="ph"><h2 id="p1title">Main Control Unit (PLA)</h2></div>
+  <div id="plaView"><svg id="pla" role="img" aria-label="Main Control Unit PLA diagram" viewBox="44 -22 1220 994" preserveAspectRatio="xMidYMin meet"><text class="inlbl" x="70" y="18" text-anchor="middle">Op5</text><rect class="bitbox" data-bitbox="op5" x="57" y="26" width="26" height="24" rx="4"/><text class="bitval" data-val="op5" x="70" y="44" text-anchor="middle">0</text><path class="w vop" data-net="op5" d="M70,52 V930"/><text class="inlbl" x="116" y="18" text-anchor="middle">Op4</text><rect class="bitbox" data-bitbox="op4" x="103" y="26" width="26" height="24" rx="4"/><text class="bitval" data-val="op4" x="116" y="44" text-anchor="middle">0</text><path class="w vop" data-net="op4" d="M116,52 V930"/><text class="inlbl" x="162" y="18" text-anchor="middle">Op3</text><rect class="bitbox" data-bitbox="op3" x="149" y="26" width="26" height="24" rx="4"/><text class="bitval" data-val="op3" x="162" y="44" text-anchor="middle">0</text><path class="w vop" data-net="op3" d="M162,52 V930"/><text class="inlbl" x="208" y="18" text-anchor="middle">Op2</text><rect class="bitbox" data-bitbox="op2" x="195" y="26" width="26" height="24" rx="4"/><text class="bitval" data-val="op2" x="208" y="44" text-anchor="middle">0</text><path class="w vop" data-net="op2" d="M208,52 V930"/><text class="inlbl" x="254" y="18" text-anchor="middle">Op1</text><rect class="bitbox" data-bitbox="op1" x="241" y="26" width="26" height="24" rx="4"/><text class="bitval" data-val="op1" x="254" y="44" text-anchor="middle">0</text><path class="w vop" data-net="op1" d="M254,52 V930"/><text class="inlbl" x="300" y="18" text-anchor="middle">Op0</text><rect class="bitbox" data-bitbox="op0" x="287" y="26" width="26" height="24" rx="4"/><text class="bitval" data-val="op0" x="300" y="44" text-anchor="middle">0</text><path class="w vop" data-net="op0" d="M300,52 V930"/><text class="gname" data-gate="rtype" x="510" y="39" text-anchor="middle">R-type <tspan class="gcode">000000</tspan></text><circle class="dot" data-net="op5" cx="70" cy="60" r="4.5"/><path class="w in" data-gin="rtype" data-net="op5" d="M70,60 H458"/><circle class="bub" data-gate="rtype" data-bit="5" cx="464" cy="60" r="6"/><circle class="dot" data-net="op4" cx="116" cy="82" r="4.5"/><path class="w in" data-gin="rtype" data-net="op4" d="M116,82 H458"/><circle class="bub" data-gate="rtype" data-bit="4" cx="464" cy="82" r="6"/><circle class="dot" data-net="op3" cx="162" cy="104" r="4.5"/><path class="w in" data-gin="rtype" data-net="op3" d="M162,104 H458"/><circle class="bub" data-gate="rtype" data-bit="3" cx="464" cy="104" r="6"/><circle class="dot" data-net="op2" cx="208" cy="126" r="4.5"/><path class="w in" data-gin="rtype" data-net="op2" d="M208,126 H458"/><circle class="bub" data-gate="rtype" data-bit="2" cx="464" cy="126" r="6"/><circle class="dot" data-net="op1" cx="254" cy="148" r="4.5"/><path class="w in" data-gin="rtype" data-net="op1" d="M254,148 H458"/><circle class="bub" data-gate="rtype" data-bit="1" cx="464" cy="148" r="6"/><circle class="dot" data-net="op0" cx="300" cy="170" r="4.5"/><path class="w in" data-gin="rtype" data-net="op0" d="M300,170 H458"/><circle class="bub" data-gate="rtype" data-bit="0" cx="464" cy="170" r="6"/><path class="gate" data-gate="rtype" d="M470,49.0 H510 A66.0,66.0 0 0 1 510,181.0 H470 Z"/><text class="glbl" x="510" y="120" text-anchor="middle">AND</text><text class="gname" data-gate="lw" x="510" y="224" text-anchor="middle">lw <tspan class="gcode">100011</tspan></text><circle class="dot" data-net="op5" cx="70" cy="245" r="4.5"/><path class="w in" data-gin="lw" data-net="op5" d="M70,245 H470"/><circle class="dot" data-net="op4" cx="116" cy="267" r="4.5"/><path class="w in" data-gin="lw" data-net="op4" d="M116,267 H458"/><circle class="bub" data-gate="lw" data-bit="4" cx="464" cy="267" r="6"/><circle class="dot" data-net="op3" cx="162" cy="289" r="4.5"/><path class="w in" data-gin="lw" data-net="op3" d="M162,289 H458"/><circle class="bub" data-gate="lw" data-bit="3" cx="464" cy="289" r="6"/><circle class="dot" data-net="op2" cx="208" cy="311" r="4.5"/><path class="w in" data-gin="lw" data-net="op2" d="M208,311 H458"/><circle class="bub" data-gate="lw" data-bit="2" cx="464" cy="311" r="6"/><circle class="dot" data-net="op1" cx="254" cy="333" r="4.5"/><path class="w in" data-gin="lw" data-net="op1" d="M254,333 H470"/><circle class="dot" data-net="op0" cx="300" cy="355" r="4.5"/><path class="w in" data-gin="lw" data-net="op0" d="M300,355 H470"/><path class="gate" data-gate="lw" d="M470,234.0 H510 A66.0,66.0 0 0 1 510,366.0 H470 Z"/><text class="glbl" x="510" y="305" text-anchor="middle">AND</text><text class="gname" data-gate="sw" x="510" y="409" text-anchor="middle">sw <tspan class="gcode">101011</tspan></text><circle class="dot" data-net="op5" cx="70" cy="430" r="4.5"/><path class="w in" data-gin="sw" data-net="op5" d="M70,430 H470"/><circle class="dot" data-net="op4" cx="116" cy="452" r="4.5"/><path class="w in" data-gin="sw" data-net="op4" d="M116,452 H458"/><circle class="bub" data-gate="sw" data-bit="4" cx="464" cy="452" r="6"/><circle class="dot" data-net="op3" cx="162" cy="474" r="4.5"/><path class="w in" data-gin="sw" data-net="op3" d="M162,474 H470"/><circle class="dot" data-net="op2" cx="208" cy="496" r="4.5"/><path class="w in" data-gin="sw" data-net="op2" d="M208,496 H458"/><circle class="bub" data-gate="sw" data-bit="2" cx="464" cy="496" r="6"/><circle class="dot" data-net="op1" cx="254" cy="518" r="4.5"/><path class="w in" data-gin="sw" data-net="op1" d="M254,518 H470"/><circle class="dot" data-net="op0" cx="300" cy="540" r="4.5"/><path class="w in" data-gin="sw" data-net="op0" d="M300,540 H470"/><path class="gate" data-gate="sw" d="M470,419.0 H510 A66.0,66.0 0 0 1 510,551.0 H470 Z"/><text class="glbl" x="510" y="490" text-anchor="middle">AND</text><text class="gname" data-gate="beq" x="510" y="594" text-anchor="middle">beq <tspan class="gcode">000100</tspan></text><circle class="dot" data-net="op5" cx="70" cy="615" r="4.5"/><path class="w in" data-gin="beq" data-net="op5" d="M70,615 H458"/><circle class="bub" data-gate="beq" data-bit="5" cx="464" cy="615" r="6"/><circle class="dot" data-net="op4" cx="116" cy="637" r="4.5"/><path class="w in" data-gin="beq" data-net="op4" d="M116,637 H458"/><circle class="bub" data-gate="beq" data-bit="4" cx="464" cy="637" r="6"/><circle class="dot" data-net="op3" cx="162" cy="659" r="4.5"/><path class="w in" data-gin="beq" data-net="op3" d="M162,659 H458"/><circle class="bub" data-gate="beq" data-bit="3" cx="464" cy="659" r="6"/><circle class="dot" data-net="op2" cx="208" cy="681" r="4.5"/><path class="w in" data-gin="beq" data-net="op2" d="M208,681 H470"/><circle class="dot" data-net="op1" cx="254" cy="703" r="4.5"/><path class="w in" data-gin="beq" data-net="op1" d="M254,703 H458"/><circle class="bub" data-gate="beq" data-bit="1" cx="464" cy="703" r="6"/><circle class="dot" data-net="op0" cx="300" cy="725" r="4.5"/><path class="w in" data-gin="beq" data-net="op0" d="M300,725 H458"/><circle class="bub" data-gate="beq" data-bit="0" cx="464" cy="725" r="6"/><path class="gate" data-gate="beq" d="M470,604.0 H510 A66.0,66.0 0 0 1 510,736.0 H470 Z"/><text class="glbl" x="510" y="675" text-anchor="middle">AND</text><text class="gname" data-gate="addi" x="510" y="779" text-anchor="middle">addi <tspan class="gcode">001000</tspan></text><circle class="dot" data-net="op5" cx="70" cy="800" r="4.5"/><path class="w in" data-gin="addi" data-net="op5" d="M70,800 H458"/><circle class="bub" data-gate="addi" data-bit="5" cx="464" cy="800" r="6"/><circle class="dot" data-net="op4" cx="116" cy="822" r="4.5"/><path class="w in" data-gin="addi" data-net="op4" d="M116,822 H458"/><circle class="bub" data-gate="addi" data-bit="4" cx="464" cy="822" r="6"/><circle class="dot" data-net="op3" cx="162" cy="844" r="4.5"/><path class="w in" data-gin="addi" data-net="op3" d="M162,844 H470"/><circle class="dot" data-net="op2" cx="208" cy="866" r="4.5"/><path class="w in" data-gin="addi" data-net="op2" d="M208,866 H458"/><circle class="bub" data-gate="addi" data-bit="2" cx="464" cy="866" r="6"/><circle class="dot" data-net="op1" cx="254" cy="888" r="4.5"/><path class="w in" data-gin="addi" data-net="op1" d="M254,888 H458"/><circle class="bub" data-gate="addi" data-bit="1" cx="464" cy="888" r="6"/><circle class="dot" data-net="op0" cx="300" cy="910" r="4.5"/><path class="w in" data-gin="addi" data-net="op0" d="M300,910 H458"/><circle class="bub" data-gate="addi" data-bit="0" cx="464" cy="910" r="6"/><path class="gate" data-gate="addi" d="M470,789.0 H510 A66.0,66.0 0 0 1 510,921.0 H470 Z"/><text class="glbl" x="510" y="860" text-anchor="middle">AND</text><circle class="bub lg" cx="652" cy="-6" r="7"/><text class="legend" x="666" y="0">bubble: this bit must be 0. An orange bubble outputs 1.</text><text class="legend" x="644" y="24">(direct) = the output comes from one AND gate, with no OR gate.</text><text class="legend" x="50" y="960">A dot joins wires. A hop, or a plain crossing in the AND array, means the wires are not joined.</text><path class="gate" data-gate="or_alusrc" d="M885,125.0 Q907,165 885,205.0 Q945,205.0 970,165 Q945,125.0 885,125.0 Z"/><text class="glbl" x="925" y="170" text-anchor="middle">OR</text><path class="gate" data-gate="or_regwrite" d="M885,335.0 Q907,375 885,415.0 Q945,415.0 970,375 Q945,335.0 885,335.0 Z"/><text class="glbl" x="925" y="380" text-anchor="middle">OR</text><path class="w" data-net="rtype" d="M576,115 H770"/><path class="w" data-net="rtype" d="M770,60 V795"/><circle class="dot" data-net="rtype" cx="770" cy="115" r="4.5"/><path class="w" data-net="rtype" d="M770,60 H1010"/><path class="w" data-net="rtype" d="M770,355 H804 A6,6 0 0 1 816,355 H893"/><circle class="dot" data-net="rtype" cx="770" cy="355" r="4.5"/><path class="w" data-net="rtype" d="M770,795 H1010"/><path class="w" data-net="lw" d="M576,300 H684 A6,6 0 0 1 696,300 H724 A6,6 0 0 1 736,300 H764 A6,6 0 0 1 776,300 H810"/><path class="w" data-net="lw" d="M810,145 V480"/><circle class="dot" data-net="lw" cx="810" cy="300" r="4.5"/><path class="w" data-net="lw" d="M810,145 H893"/><path class="w" data-net="lw" d="M810,270 H1010"/><circle class="dot" data-net="lw" cx="810" cy="270" r="4.5"/><path class="w" data-net="lw" d="M810,375 H893"/><circle class="dot" data-net="lw" cx="810" cy="375" r="4.5"/><path class="w" data-net="lw" d="M810,480 H1010"/><path class="w" data-net="sw" d="M576,485 H690"/><path class="w" data-net="sw" d="M690,165 V585"/><circle class="dot" data-net="sw" cx="690" cy="485" r="4.5"/><path class="w" data-net="sw" d="M690,165 H764 A6,6 0 0 1 776,165 H804 A6,6 0 0 1 816,165 H893"/><path class="w" data-net="sw" d="M690,585 H724 A6,6 0 0 1 736,585 H764 A6,6 0 0 1 776,585 H1010"/><path class="w" data-net="beq" d="M576,670 H650"/><path class="w" data-net="beq" d="M650,670 V900"/><path class="w" data-net="beq" d="M650,690 H724 A6,6 0 0 1 736,690 H764 A6,6 0 0 1 776,690 H1010"/><circle class="dot" data-net="beq" cx="650" cy="690" r="4.5"/><path class="w" data-net="beq" d="M650,900 H1010"/><path class="w" data-net="addi" d="M576,855 H644 A6,6 0 0 1 656,855 H730"/><path class="w" data-net="addi" d="M730,185 V855"/><path class="w" data-net="addi" d="M730,185 H764 A6,6 0 0 1 776,185 H804 A6,6 0 0 1 816,185 H893"/><path class="w" data-net="addi" d="M730,395 H764 A6,6 0 0 1 776,395 H804 A6,6 0 0 1 816,395 H893"/><circle class="dot" data-net="addi" cx="730" cy="395" r="4.5"/><path class="w" data-net="out_ALUSrc" d="M970,165 H1010"/><path class="w" data-net="out_RegWrite" d="M970,375 H1010"/><path class="arrow" data-net="out_RegDst" d="M1010,54 L1022,60 L1010,66 Z"/><text class="direct" x="1006" y="52" text-anchor="end">(direct)</text><text class="oname" x="1030" y="66">RegDst</text><text class="oterm" x="1030" y="86">(R-type)</text><rect class="obox" data-obox="RegDst" x="1212" y="44" width="34" height="30" rx="5"/><text class="val" data-val="RegDst" x="1229" y="66" text-anchor="middle">0</text><path class="arrow" data-net="out_ALUSrc" d="M1010,159 L1022,165 L1010,171 Z"/><text class="oname" x="1030" y="171">ALUSrc</text><text class="oterm" x="1030" y="191">(lw + sw + addi)</text><rect class="obox" data-obox="ALUSrc" x="1212" y="149" width="34" height="30" rx="5"/><text class="val" data-val="ALUSrc" x="1229" y="171" text-anchor="middle">0</text><path class="arrow" data-net="out_MemToReg" d="M1010,264 L1022,270 L1010,276 Z"/><text class="direct" x="1006" y="262" text-anchor="end">(direct)</text><text class="oname" x="1030" y="276">MemToReg</text><text class="oterm" x="1030" y="296">(lw)</text><rect class="obox" data-obox="MemToReg" x="1212" y="254" width="34" height="30" rx="5"/><text class="val" data-val="MemToReg" x="1229" y="276" text-anchor="middle">0</text><path class="arrow" data-net="out_RegWrite" d="M1010,369 L1022,375 L1010,381 Z"/><text class="oname" x="1030" y="381">RegWrite</text><text class="oterm" x="1030" y="401">(R-type + lw + addi)</text><rect class="obox" data-obox="RegWrite" x="1212" y="359" width="34" height="30" rx="5"/><text class="val" data-val="RegWrite" x="1229" y="381" text-anchor="middle">0</text><path class="arrow" data-net="out_MemRead" d="M1010,474 L1022,480 L1010,486 Z"/><text class="direct" x="1006" y="472" text-anchor="end">(direct)</text><text class="oname" x="1030" y="486">MemRead</text><text class="oterm" x="1030" y="506">(lw)</text><rect class="obox" data-obox="MemRead" x="1212" y="464" width="34" height="30" rx="5"/><text class="val" data-val="MemRead" x="1229" y="486" text-anchor="middle">0</text><path class="arrow" data-net="out_MemWrite" d="M1010,579 L1022,585 L1010,591 Z"/><text class="direct" x="1006" y="577" text-anchor="end">(direct)</text><text class="oname" x="1030" y="591">MemWrite</text><text class="oterm" x="1030" y="611">(sw)</text><rect class="obox" data-obox="MemWrite" x="1212" y="569" width="34" height="30" rx="5"/><text class="val" data-val="MemWrite" x="1229" y="591" text-anchor="middle">0</text><path class="arrow" data-net="out_Branch" d="M1010,684 L1022,690 L1010,696 Z"/><text class="direct" x="1006" y="682" text-anchor="end">(direct)</text><text class="oname" x="1030" y="696">Branch</text><text class="oterm" x="1030" y="716">(beq)</text><rect class="obox" data-obox="Branch" x="1212" y="674" width="34" height="30" rx="5"/><text class="val" data-val="Branch" x="1229" y="696" text-anchor="middle">0</text><path class="arrow" data-net="out_ALUOp1" d="M1010,789 L1022,795 L1010,801 Z"/><text class="direct" x="1006" y="787" text-anchor="end">(direct)</text><text class="oname" x="1030" y="801">ALUOp1</text><text class="oterm" x="1030" y="821">(R-type)</text><rect class="obox" data-obox="ALUOp1" x="1212" y="779" width="34" height="30" rx="5"/><text class="val" data-val="ALUOp1" x="1229" y="801" text-anchor="middle">0</text><path class="arrow" data-net="out_ALUOp0" d="M1010,894 L1022,900 L1010,906 Z"/><text class="direct" x="1006" y="892" text-anchor="end">(direct)</text><text class="oname" x="1030" y="906">ALUOp0</text><text class="oterm" x="1030" y="926">(beq)</text><rect class="obox" data-obox="ALUOp0" x="1212" y="884" width="34" height="30" rx="5"/><text class="val" data-val="ALUOp0" x="1229" y="906" text-anchor="middle">0</text></svg></div><div id="romView" hidden><p class="romsel" id="romSel"></p><svg id="romsvg" role="img" aria-label="Main Control Unit ROM diagram" viewBox="0 30 1160 872" preserveAspectRatio="xMidYMin meet"><rect class="blk" x="20" y="380" width="170" height="100" rx="10"/><text class="blkt" x="105" y="424" text-anchor="middle">Instruction</text><text class="blkt" x="105" y="448" text-anchor="middle">Memory</text><text class="oterm" x="105" y="505" text-anchor="middle">(Instr[31:0]), 32 bits</text><path class="bus" d="M190,430 H418"/><path class="busarrow" d="M418,422 L432,430 L418,438 Z"/><text class="inlbl" x="300" y="356" text-anchor="middle">Opcode</text><text class="oterm" x="300" y="380" text-anchor="middle">(Instr[31:26]), 6 bits</text><rect class="addrbox" x="246" y="413" width="108" height="34" rx="5"/><text class="addrval" data-val="romaddr" x="300" y="437" text-anchor="middle">000000</text><text class="oterm" x="300" y="475" text-anchor="middle">Used as the</text><text class="oterm" x="300" y="497" text-anchor="middle">ROM address</text><rect class="rombox" x="432" y="40" width="400" height="830" rx="8"/><text class="romtitle" x="632" y="72" text-anchor="middle">ROM (64 rows × 9 bits)</text><text class="romhdr" x="452" y="104">Address</text><text class="romhdr" x="566" y="104">Instr.</text><text class="romhdr" x="660" y="104">Word (9 bits)</text><text class="legend" x="632" y="892" text-anchor="middle">Word bits, left to right = output wires, top to bottom</text><g class="romrow" data-addr="000000"><rect x="440" y="112" width="384" height="66" rx="5"/><text class="ra" x="452" y="153">000000</text><text class="rn" x="566" y="153">R-type</text><text class="rw" data-word="100100010" x="660" y="153"><tspan>1</tspan><tspan>0</tspan><tspan>0</tspan><tspan>1</tspan><tspan>0</tspan><tspan>0</tspan><tspan>0</tspan><tspan>1</tspan><tspan>0</tspan></text></g><g class="romgap" data-lo="000001" data-hi="000011" data-txt="unused: 000001 to 000011"><rect x="440" y="186" width="384" height="66" rx="5"/><text class="gt" x="632" y="226" text-anchor="middle">unused: 000001 to 000011</text></g><g class="romrow" data-addr="000100"><rect x="440" y="260" width="384" height="66" rx="5"/><text class="ra" x="452" y="301">000100</text><text class="rn" x="566" y="301">beq</text><text class="rw" data-word="X0X000101" x="660" y="301"><tspan>X</tspan><tspan>0</tspan><tspan>X</tspan><tspan>0</tspan><tspan>0</tspan><tspan>0</tspan><tspan>1</tspan><tspan>0</tspan><tspan>1</tspan></text></g><g class="romgap" data-lo="000101" data-hi="000111" data-txt="unused: 000101 to 000111"><rect x="440" y="334" width="384" height="66" rx="5"/><text class="gt" x="632" y="374" text-anchor="middle">unused: 000101 to 000111</text></g><g class="romrow" data-addr="001000"><rect x="440" y="408" width="384" height="66" rx="5"/><text class="ra" x="452" y="449">001000</text><text class="rn" x="566" y="449">addi</text><text class="rw" data-word="010100000" x="660" y="449"><tspan>0</tspan><tspan>1</tspan><tspan>0</tspan><tspan>1</tspan><tspan>0</tspan><tspan>0</tspan><tspan>0</tspan><tspan>0</tspan><tspan>0</tspan></text></g><g class="romgap" data-lo="001001" data-hi="100010" data-txt="unused: 001001 to 100010"><rect x="440" y="482" width="384" height="66" rx="5"/><text class="gt" x="632" y="522" text-anchor="middle">unused: 001001 to 100010</text></g><g class="romrow" data-addr="100011"><rect x="440" y="556" width="384" height="66" rx="5"/><text class="ra" x="452" y="597">100011</text><text class="rn" x="566" y="597">lw</text><text class="rw" data-word="011110000" x="660" y="597"><tspan>0</tspan><tspan>1</tspan><tspan>1</tspan><tspan>1</tspan><tspan>1</tspan><tspan>0</tspan><tspan>0</tspan><tspan>0</tspan><tspan>0</tspan></text></g><g class="romgap" data-lo="100100" data-hi="101010" data-txt="unused: 100100 to 101010"><rect x="440" y="630" width="384" height="66" rx="5"/><text class="gt" x="632" y="670" text-anchor="middle">unused: 100100 to 101010</text></g><g class="romrow" data-addr="101011"><rect x="440" y="704" width="384" height="66" rx="5"/><text class="ra" x="452" y="745">101011</text><text class="rn" x="566" y="745">sw</text><text class="rw" data-word="X1X001000" x="660" y="745"><tspan>X</tspan><tspan>1</tspan><tspan>X</tspan><tspan>0</tspan><tspan>0</tspan><tspan>1</tspan><tspan>0</tspan><tspan>0</tspan><tspan>0</tspan></text></g><g class="romgap" data-lo="101100" data-hi="111111" data-txt="unused: 101100 to 111111"><rect x="440" y="778" width="384" height="66" rx="5"/><text class="gt" x="632" y="818" text-anchor="middle">unused: 101100 to 111111</text></g><text class="romhdr" x="900" y="72" text-anchor="middle">9 output bits</text><path class="w ro" data-net="rom_o0" d="M832,125 H955"/><path class="arrow" data-net="rom_o0" d="M955,119 L967,125 L955,131 Z"/><text class="oname" x="975" y="132">RegDst</text><rect class="obox" data-obox="rom_o0" x="1112" y="109" width="34" height="30" rx="5"/><text class="val" data-val="rom_o0" x="1129" y="131" text-anchor="middle">0</text><path class="w ro" data-net="rom_o1" d="M832,213 H955"/><path class="arrow" data-net="rom_o1" d="M955,207 L967,213 L955,219 Z"/><text class="oname" x="975" y="220">ALUSrc</text><rect class="obox" data-obox="rom_o1" x="1112" y="197" width="34" height="30" rx="5"/><text class="val" data-val="rom_o1" x="1129" y="219" text-anchor="middle">0</text><path class="w ro" data-net="rom_o2" d="M832,301 H955"/><path class="arrow" data-net="rom_o2" d="M955,295 L967,301 L955,307 Z"/><text class="oname" x="975" y="308">MemToReg</text><rect class="obox" data-obox="rom_o2" x="1112" y="285" width="34" height="30" rx="5"/><text class="val" data-val="rom_o2" x="1129" y="307" text-anchor="middle">0</text><path class="w ro" data-net="rom_o3" d="M832,389 H955"/><path class="arrow" data-net="rom_o3" d="M955,383 L967,389 L955,395 Z"/><text class="oname" x="975" y="396">RegWrite</text><rect class="obox" data-obox="rom_o3" x="1112" y="373" width="34" height="30" rx="5"/><text class="val" data-val="rom_o3" x="1129" y="395" text-anchor="middle">0</text><path class="w ro" data-net="rom_o4" d="M832,477 H955"/><path class="arrow" data-net="rom_o4" d="M955,471 L967,477 L955,483 Z"/><text class="oname" x="975" y="484">MemRead</text><rect class="obox" data-obox="rom_o4" x="1112" y="461" width="34" height="30" rx="5"/><text class="val" data-val="rom_o4" x="1129" y="483" text-anchor="middle">0</text><path class="w ro" data-net="rom_o5" d="M832,565 H955"/><path class="arrow" data-net="rom_o5" d="M955,559 L967,565 L955,571 Z"/><text class="oname" x="975" y="572">MemWrite</text><rect class="obox" data-obox="rom_o5" x="1112" y="549" width="34" height="30" rx="5"/><text class="val" data-val="rom_o5" x="1129" y="571" text-anchor="middle">0</text><path class="w ro" data-net="rom_o6" d="M832,653 H955"/><path class="arrow" data-net="rom_o6" d="M955,647 L967,653 L955,659 Z"/><text class="oname" x="975" y="660">Branch</text><rect class="obox" data-obox="rom_o6" x="1112" y="637" width="34" height="30" rx="5"/><text class="val" data-val="rom_o6" x="1129" y="659" text-anchor="middle">0</text><path class="w ro" data-net="rom_o7" d="M832,741 H955"/><path class="arrow" data-net="rom_o7" d="M955,735 L967,741 L955,747 Z"/><text class="oname" x="975" y="748">ALUOp1</text><rect class="obox" data-obox="rom_o7" x="1112" y="725" width="34" height="30" rx="5"/><text class="val" data-val="rom_o7" x="1129" y="747" text-anchor="middle">0</text><path class="w ro" data-net="rom_o8" d="M832,829 H955"/><path class="arrow" data-net="rom_o8" d="M955,823 L967,829 L955,835 Z"/><text class="oname" x="975" y="836">ALUOp0</text><rect class="obox" data-obox="rom_o8" x="1112" y="813" width="34" height="30" rx="5"/><text class="val" data-val="rom_o8" x="1129" y="835" text-anchor="middle">0</text></svg></div></div>
+ <div class="col">
+  <div class="panel" id="panelAlu"><div class="ph"><h2>ALU Decoder</h2><button type="button" class="focusbtn" data-f="alu" aria-pressed="false" aria-label="Focus ALU Decoder" data-t="Make the ALU Decoder diagram larger; the other diagrams stay visible as small overviews" title="Make the ALU Decoder diagram larger; the other diagrams stay visible as small overviews">&#10530;<span class="ft">Focus</span></button></div><svg id="alu" role="img" aria-label="ALU Decoder gate diagram" viewBox="-8 18 1038 446"><text class="inlbl" x="78" y="76" text-anchor="end">ALUOp1</text><text class="val" data-val="aluop1" x="96" y="62" text-anchor="start">0</text><text class="inlbl" x="78" y="126" text-anchor="end">ALUOp0</text><text class="val" data-val="aluop0" x="96" y="112" text-anchor="start">0</text><text class="inlbl" x="78" y="196" text-anchor="end">F3</text><text class="val" data-val="f3" x="96" y="182" text-anchor="start">0</text><text class="inlbl" x="78" y="256" text-anchor="end">F2</text><text class="val" data-val="f2" x="96" y="242" text-anchor="start">0</text><text class="inlbl" x="78" y="316" text-anchor="end">F1</text><text class="val" data-val="f1" x="96" y="302" text-anchor="start">0</text><text class="inlbl" x="78" y="376" text-anchor="end">F0</text><text class="val" data-val="f0" x="96" y="362" text-anchor="start">0</text><path class="w" data-net="aluop1" d="M88,70 H119 A6,6 0 0 1 131,70 H300"/><circle class="dot" data-net="aluop1" cx="235" cy="70" r="4.5"/><path class="w" data-net="aluop1" d="M235,70 V345"/><path class="w" data-net="aluop1" d="M235,205 H300"/><circle class="dot" data-net="aluop1" cx="235" cy="205" r="4.5"/><path class="w" data-net="aluop1" d="M235,345 H480"/><path class="w" data-net="aluop0" d="M88,120 H119 A6,6 0 0 1 131,120 H229 A6,6 0 0 1 241,120 H485"/><path class="w" data-net="f3" d="M88,190 H119 A6,6 0 0 1 131,190 H170"/><path class="w" data-net="f3" d="M170,190 V405 H305"/><path class="w" data-net="f2" d="M88,250 H119 A6,6 0 0 1 131,250 H164 A6,6 0 0 1 176,250 H229 A6,6 0 0 1 241,250 H270"/><path class="w" data-net="f2" d="M270,250 V275 H300"/><path class="w" data-net="f1" d="M88,310 H125 V40 H300"/><path class="w" data-net="f0" d="M88,370 H140 V435 H305"/><path class="gate" data-gate="and_a" d="M300,25.0 H340 A30.0,30.0 0 0 1 340,85.0 H300 Z"/><text class="glbl" x="340" y="60" text-anchor="middle">AND</text><path class="w" data-net="and_a" d="M370,55 H420 V90 H485"/><text class="val gv" data-val="and_a" x="392" y="47">0</text><path class="gate" data-gate="or_c2" d="M480,75.0 Q502,105 480,135.0 Q540,135.0 565,105 Q540,75.0 480,75.0 Z"/><text class="glbl" x="520" y="110" text-anchor="middle">OR</text><path class="w" data-net="c2" d="M565,105 H600"/><path class="gate" data-gate="not1" d="M300,175 L370,205 L300,235 Z"/><circle class="bub nb" data-gate="not1" cx="376" cy="205" r="6"/><text class="glbl sm" x="323" y="211" text-anchor="middle">NOT</text><path class="w" data-net="not1" d="M382,205 H420 V220 H485"/><text class="val gv" data-val="not1" x="398" y="197">0</text><path class="gate" data-gate="not2" d="M300,245 L370,275 L300,305 Z"/><circle class="bub nb" data-gate="not2" cx="376" cy="275" r="6"/><text class="glbl sm" x="323" y="281" text-anchor="middle">NOT</text><path class="w" data-net="not2" d="M382,275 H420 V250 H485"/><text class="val gv" data-val="not2" x="398" y="296">0</text><path class="gate" data-gate="or_c1" d="M480,205.0 Q502,235 480,265.0 Q540,265.0 565,235 Q540,205.0 480,205.0 Z"/><text class="glbl" x="520" y="240" text-anchor="middle">OR</text><path class="w" data-net="c1" d="M565,235 H600"/><path class="gate" data-gate="or_f" d="M300,390.0 Q322,420 300,450.0 Q360,450.0 385,420 Q360,390.0 300,390.0 Z"/><text class="glbl" x="340" y="425" text-anchor="middle">OR</text><path class="w" data-net="or_f" d="M385,420 H430 V375 H480"/><text class="val gv" data-val="or_f" x="405" y="412">0</text><path class="gate" data-gate="and_c0" d="M480,330.0 H520 A30.0,30.0 0 0 1 520,390.0 H480 Z"/><text class="glbl" x="520" y="365" text-anchor="middle">AND</text><path class="w" data-net="c0" d="M550,360 H600"/><path class="arrow" data-net="c2" d="M600,99 L612,105 L600,111 Z"/><rect class="obox" data-obox="c2" x="618" y="89" width="34" height="30" rx="5"/><text class="val" data-val="c2" x="635" y="111" text-anchor="middle">0</text><text class="cname" x="664" y="97">C2 = ALUOp0 OR (ALUOp1 AND F1)</text><text class="ceval" data-eq="c2" x="664" y="123"></text><path class="arrow" data-net="c1" d="M600,229 L612,235 L600,241 Z"/><rect class="obox" data-obox="c1" x="618" y="219" width="34" height="30" rx="5"/><text class="val" data-val="c1" x="635" y="241" text-anchor="middle">0</text><text class="cname" x="664" y="227">C1 = NOT(ALUOp1) OR NOT(F2)</text><text class="ceval" data-eq="c1" x="664" y="253"></text><path class="arrow" data-net="c0" d="M600,354 L612,360 L600,366 Z"/><rect class="obox" data-obox="c0" x="618" y="344" width="34" height="30" rx="5"/><text class="val" data-val="c0" x="635" y="366" text-anchor="middle">0</text><text class="cname" x="664" y="352">C0 = ALUOp1 AND (F0 OR F3)</text><text class="ceval" data-eq="c0" x="664" y="378"></text><text class="legend" x="480" y="452">A hop means the wires cross without joining.</text></svg><div class="aluc" id="aluc"></div></div>
+  <div class="panel" id="panelBr"><div class="ph"><h2>Branch Logic</h2><button type="button" class="focusbtn" data-f="br" aria-pressed="false" aria-label="Focus Branch Logic" data-t="Make the Branch Logic diagram larger; the other diagrams stay visible as small overviews" title="Make the Branch Logic diagram larger; the other diagrams stay visible as small overviews">&#10530;<span class="ft">Focus</span></button></div><svg id="br" role="img" aria-label="Branch Logic diagram" viewBox="0 0 965 280"><rect class="blk" x="10" y="40" width="130" height="64" rx="10"/><text class="blkt" x="75" y="78" text-anchor="middle">ALU</text><rect class="blk" x="10" y="160" width="170" height="90" rx="10"/><text class="blkt" x="95" y="198" text-anchor="middle">Main Control</text><text class="blkt" x="95" y="220" text-anchor="middle">Unit</text><text class="wl" x="150" y="64">Zero</text><text class="val" data-val="zero" x="150" y="98" text-anchor="start">0</text><text class="wl" x="190" y="172">Branch</text><text class="val" data-val="branch" x="250" y="172" text-anchor="start">0</text><text class="wl" x="190" y="252">BranchNE</text><text class="val" data-val="branchne" x="270" y="252" text-anchor="start">0</text><text class="wl sm" x="292" y="252">(new signal for bne)</text><path class="w" data-net="zero" d="M140,80 H269 A6,6 0 0 1 281,80 H420"/><circle class="dot" data-net="zero" cx="330" cy="80" r="4.5"/><path class="w" data-net="zero" d="M330,80 V150 H360"/><path class="w" data-net="branch" d="M180,180 H275 V50 H420"/><path class="w" data-net="branchne" d="M180,232 H520"/><path class="gate" data-gate="notz" d="M360,120 L430,150 L360,180 Z"/><circle class="bub nb" data-gate="notz" cx="436" cy="150" r="6"/><text class="glbl sm" x="383" y="156" text-anchor="middle">NOT</text><text class="wl" x="372" y="112">NOT Zero</text><path class="w" data-net="notz" d="M442,150 H470 V202 H520"/><text class="val gv" data-val="notz" x="452" y="142">0</text><path class="gate" data-gate="and1" d="M420,35.0 H460 A30.0,30.0 0 0 1 460,95.0 H420 Z"/><text class="glbl" x="460" y="70" text-anchor="middle">AND</text><text class="wl sm" x="460" y="28" text-anchor="middle">AND 1</text><path class="gate" data-gate="and2" d="M520,187.0 H560 A30.0,30.0 0 0 1 560,247.0 H520 Z"/><text class="glbl" x="560" y="222" text-anchor="middle">AND</text><text class="wl sm" x="560" y="270" text-anchor="middle">AND 2</text><path class="w" data-net="and1" d="M490,65 H610 V125 H660"/><text class="val gv" data-val="and1" x="500" y="86">0</text><path class="w" data-net="and2" d="M590,217 H610 V160 H660"/><text class="val gv" data-val="and2" x="616" y="200">0</text><path class="gate" data-gate="or_pc" d="M655,107.0 Q677,142 655,177.0 Q715,177.0 740,142 Q715,107.0 655,107.0 Z"/><text class="glbl" x="695" y="147" text-anchor="middle">OR</text><path class="w" data-net="pcsrc" d="M740,142 H800"/><text class="wl" x="746" y="130">PCSrc</text><rect class="obox" data-obox="pcsrc" x="753" y="152" width="34" height="30" rx="5"/><text class="val" data-val="pcsrc" x="770" y="174" text-anchor="middle">0</text><path class="arrow" data-net="pcsrc" d="M800,136 L812,142 L800,148 Z"/><rect class="blk" x="815" y="105" width="120" height="74" rx="10"/><text class="blkt" x="875" y="138" text-anchor="middle">PCSrc</text><text class="blkt mux" x="875" y="160" text-anchor="middle">MUX</text><text class="nextpc" id="nextpc" x="935" y="212" text-anchor="end"></text><text class="cap" x="500" y="24">beq path: Branch, Zero → AND 1 → OR → PCSrc</text><text class="cap" x="500" y="48">bne path: BranchNE, NOT Zero → AND 2 → OR → PCSrc</text></svg><div class="pceq" id="pceq"></div></div>
+ </div>
+</main>
+<div class="now"><div id="bneNote" class="bnenote"></div><div id="now" aria-live="polite"></div></div>
+<footer>&copy; 2026 Dr. Bhargav Bhatkalkar, KFSCIS, Florida International University &middot; v1</footer>
+<script>// Single-Cycle MIPS Control Unit Simulator - logic. All values are computed from the gate equations below.
+"use strict";
+const INST = [
+  {n:"add",op:"000000",f:"100000"},{n:"sub",op:"000000",f:"100010"},{n:"and",op:"000000",f:"100100"},
+  {n:"or",op:"000000",f:"100101"},{n:"slt",op:"000000",f:"101010"},{gap:1},
+  {n:"lw",op:"100011",f:"000000"},{n:"sw",op:"101011",f:"000000"},{gap:1},
+  {n:"beq",op:"000100",f:"000000"},{n:"bne",op:"000101",f:"000000"},{gap:1},
+  {n:"addi",op:"001000",f:"000000"}];
+const RFUNCT = {"100000":"add","100010":"sub","100100":"and","100101":"or","101010":"slt"};
+const OPNAME = {"100011":"lw","101011":"sw","000100":"beq","000101":"bne","001000":"addi"};
+// Truth-table rows: RegDst, ALUSrc, MemToReg, RegWrite, MemRead, MemWrite, Branch, ALUOp, BranchNE
+const ROWS = {"000000":["1","0","0","1","0","0","0","10","0"],"100011":["0","1","1","1","1","0","0","00","0"],
+  "101011":["X","1","X","0","0","1","0","00","0"],"000100":["X","0","X","0","0","0","1","01","0"],
+  "001000":["0","1","0","1","0","0","0","00","0"],"000101":["X","0","X","0","0","0","0","01","1"]};
+const SIG = ["RegDst","ALUSrc","MemToReg","RegWrite","MemRead","MemWrite","Branch"];
+const GATES = {rtype:"000000",lw:"100011",sw:"101011",beq:"000100",addi:"001000"};
+const GNAME = {rtype:"R-type",lw:"lw",sw:"sw",beq:"beq",addi:"addi"};
+const ALUNAME = {"010":"add","110":"subtract","000":"AND","001":"OR","111":"set less than"};
+const ROM = [["000000","R-type","100100010"],["000100","beq","X0X000101"],["001000","addi","010100000"],
+  ["100011","lw","011110000"],["101011","sw","X1X001000"]];
+const S = {op:"100011", f:"000000", zero:0, view:"pla", hide:false, focus:""};
+const $ = id => document.getElementById(id);
+const BIN6 = /^[01]{6}$/;
+
+function instName(op,f){
+  if(op==="000000") return RFUNCT[f] || "R-type (unsupported funct)";
+  return OPNAME[op] || "unused opcode";
+}
+function build(){
+  const box=$("instBtns");
+  INST.forEach(i=>{ if(i.gap){const g=document.createElement("span");g.className="gap";box.appendChild(g);return;}
+    const b=document.createElement("button");b.type="button";b.textContent=i.n;b.dataset.i=i.n;
+    b.onclick=()=>{S.op=i.op;S.f=i.f;resetBoxes();render();};box.appendChild(b);});
+  $("zeroSeg").querySelectorAll("button").forEach(b=>b.onclick=()=>{S.zero=+b.dataset.z;render();});
+  $("viewSeg").querySelectorAll("button").forEach(b=>b.onclick=()=>{S.view=b.dataset.v;render();});
+  $("hide").onchange=e=>{S.hide=e.target.checked;render();};
+  // Focus: one diagram takes about two thirds of the diagram area; the other two stay visible
+  document.querySelectorAll(".focusbtn").forEach(b=>b.onclick=()=>{S.focus = S.focus===b.dataset.f ? "" : b.dataset.f; render();});
+  document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&S.focus){ S.focus=""; render(); } });
+  $("hide").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); $("hide").click(); } });
+  for(const [id,key] of [["opcode","op"],["funct","f"]]){
+    const el=$(id);
+    el.addEventListener("input",()=>{ const v=el.value.trim();
+      if(BIN6.test(v)){ el.classList.remove("bad"); S[key]=v; render(); }
+      else el.classList.add("bad");
+      showHint(); });
+    el.addEventListener("blur",()=>{ if(!BIN6.test(el.value.trim())){ el.value=S[key]; el.classList.remove("bad"); } showHint(); });
+  }
+}
+function resetBoxes(){ for(const [id,key] of [["opcode","op"],["funct","f"]]){ $(id).value=S[key]; $(id).classList.remove("bad"); } showHint(); }
+function showHint(){ $("bitHint").hidden = !document.querySelector(".bits6.bad"); document.querySelectorAll(".bits6").forEach(e=>e.setAttribute("aria-invalid",e.classList.contains("bad"))); }
+// ---- drawing helpers ----
+function paint(svg,net,v,hidden){ svg.querySelectorAll(`[data-net="${net}"]`).forEach(e=>{
+  e.classList.toggle("on",!hidden&&v===1); e.classList.toggle("off",!hidden&&v===0); }); }
+function gate(svg,g,v,hidden){ svg.querySelectorAll(`.gate[data-gate="${g}"],.bub.nb[data-gate="${g}"]`).forEach(e=>e.classList.toggle("on",!hidden&&v===1)); }
+function text(svg,k,v,hidden){ svg.querySelectorAll(`[data-val="${k}"]`).forEach(e=>{
+  e.textContent = hidden ? "?" : String(v); e.classList.toggle("on",!hidden&&String(v)==="1"); }); }
+
+function render(){
+  const op=S.op, f=S.f, H=S.hide, isBne = op==="000101", name=instName(op,f);
+  if(document.activeElement!==$("opcode")) $("opcode").value=op;
+  if(document.activeElement!==$("funct")) $("funct").value=f;
+  document.querySelectorAll("#instBtns button").forEach(b=>{b.classList.toggle("sel",b.dataset.i===name);b.setAttribute("aria-pressed",b.dataset.i===name);});
+  document.querySelectorAll("#zeroSeg button").forEach(b=>{b.classList.toggle("sel",+b.dataset.z===S.zero);b.setAttribute("aria-pressed",+b.dataset.z===S.zero);});
+  document.querySelectorAll("#viewSeg button").forEach(b=>{b.classList.toggle("sel",b.dataset.v===S.view);b.setAttribute("aria-pressed",b.dataset.v===S.view);});
+  document.body.classList.toggle("hide",H);
+  const mainEl=document.querySelector("main"); ["alu","br"].forEach(k=>mainEl.classList.toggle("focus-"+k,S.focus===k)); mainEl.classList.toggle("focus",!!S.focus);
+  document.querySelectorAll(".focusbtn").forEach(b=>{ const on=S.focus===b.dataset.f; b.setAttribute("aria-pressed",on); b.classList.toggle("on",on);
+    b.querySelector(".ft").textContent = on ? "Back to normal size" : "Focus"; b.title = on ? "Return to the normal layout (or press Esc)" : b.dataset.t; }); $("hideTxt").textContent = H ? "Show outputs" : "Hide outputs";
+  $("zeroSeg").classList.toggle("right",S.zero===1); $("viewSeg").classList.toggle("right",S.view==="rom");
+  // ---- Main Control Unit (PLA) ----
+  const pla=$("pla"); const bit=k=>+op[5-k];
+  for(let k=0;k<6;k++){ paint(pla,"op"+k,bit(k),false); text(pla,"op"+k,bit(k),false);
+    pla.querySelector(`[data-bitbox="op${k}"]`).classList.toggle("on",bit(k)===1); }
+  const g={}; for(const id in GATES){ g[id]= op===GATES[id]?1:0; paint(pla,id,g[id],H); gate(pla,id,g[id],H); }
+  pla.querySelectorAll(".gname").forEach(t=>t.classList.toggle("on",!H&&g[t.dataset.gate]===1));
+  pla.querySelectorAll("[data-gin]").forEach(e=>e.classList.toggle("hot",!H&&g[e.dataset.gin]===1));
+  pla.querySelectorAll(".bub[data-bit]").forEach(e=>{ const one=!H&&bit(+e.dataset.bit)===0, act=g[e.dataset.gate]===1;
+    e.classList.toggle("on",one&&act); e.classList.toggle("soft",one&&!act); });
+  const P={RegDst:g.rtype,ALUSrc:g.lw|g.sw|g.addi,MemToReg:g.lw,RegWrite:g.rtype|g.lw|g.addi,MemRead:g.lw,
+    MemWrite:g.sw,Branch:g.beq,ALUOp1:g.rtype,ALUOp0:g.beq};
+  gate(pla,"or_alusrc",P.ALUSrc,H); gate(pla,"or_regwrite",P.RegWrite,H);
+  for(const o in P){ paint(pla,"out_"+o,P[o],H); text(pla,o,P[o],H);
+    pla.querySelector(`[data-obox="${o}"]`).classList.toggle("on",!H&&P[o]===1); }
+  pla.classList.toggle("dim",isBne&&!H);
+  // ---- signals used by the other panels ----
+  const row = ROWS[op];
+  const aluop = isBne ? "01" : ""+P.ALUOp1+P.ALUOp0;
+  const branch = isBne ? 0 : P.Branch, bne = isBne?1:0;
+  // ---- ALU Decoder ----
+  const a=$("alu"); const A1=+aluop[0],A0=+aluop[1],F3=+f[2],F2=+f[3],F1=+f[4],F0=+f[5];
+  const and_a=A1&F1, c2=A0|and_a, n1=1-A1, n2=1-F2, c1=n1|n2, orf=F0|F3, c0=A1&orf;
+  [["aluop1",A1,H],["aluop0",A0,H],["f3",F3,false],["f2",F2,false],["f1",F1,false],["f0",F0,false],["and_a",and_a,H],
+   ["not1",n1,H],["not2",n2,H],["or_f",orf,H],["c2",c2,H],["c1",c1,H],["c0",c0,H]].forEach(([k,v,h])=>{paint(a,k,v,h);text(a,k,v,h);});
+  [["and_a",and_a],["or_c2",c2],["not1",n1],["not2",n2],["or_c1",c1],["or_f",orf],["and_c0",c0]].forEach(([k,v])=>gate(a,k,v,H));
+  const q=v=>H?"?":v;
+  const fin=v=>`<tspan class="fin${!H&&v===1?" on":""}">${q(v)}</tspan>`;   // final value: bold, dark orange when 1
+  a.querySelector('[data-eq="c2"]').innerHTML=`= ${q(A0)} OR (${q(A1)} AND ${F1}) = ${fin(c2)}`;
+  a.querySelector('[data-eq="c1"]').innerHTML=`= NOT(${q(A1)}) OR NOT(${F2}) = ${q(n1)} OR ${q(n2)} = ${fin(c1)}`;
+  a.querySelector('[data-eq="c0"]').innerHTML=`= ${q(A1)} AND (${F0} OR ${F3}) = ${fin(c0)}`;
+  for(const [k,v] of [["c2",c2],["c1",c1],["c0",c0]]) a.querySelector(`[data-obox="${k}"]`).classList.toggle("on",!H&&v===1);
+  const ac=""+c2+c1+c0;
+  $("aluc").innerHTML = H ? `ALUControl = C2 C1 C0 = <b>?</b>. F5 and F4 are not used.`
+    : `ALUControl = C2 C1 C0 = <b>${ac}</b> (${op==="000000"&&!RFUNCT[f] ? "don't care: unsupported funct" : ALUNAME[ac]||"not used"}). F5 and F4 are not used.`;
+  // ---- Branch Logic ----
+  const b=$("br"); const Z=S.zero, nz=1-Z, a1=branch&Z, a2=bne&nz, pc=a1|a2;
+  [["zero",Z,false],["branch",branch,H],["branchne",bne,H],["notz",nz,H],["and1",a1,H],["and2",a2,H],["pcsrc",pc,H]]
+    .forEach(([k,v,h])=>{paint(b,k,v,h);text(b,k,v,h);});
+  [["notz",nz],["and1",a1],["and2",a2],["or_pc",pc]].forEach(([k,v])=>gate(b,k,v,H));
+  $("nextpc").textContent = H ? "Next PC = ?" : (pc ? "Next PC = branch target" : "Next PC = PC + 4");
+  $("nextpc").classList.toggle("on",!H&&pc===1);
+  $("pceq").innerHTML=`PCSrc = (Branch AND Zero) OR (BranchNE AND NOT(Zero)) = (${q(branch)} AND ${Z}) OR (${q(bne)} AND ${q(nz)}) = <b class="${!H&&pc===1?"on":""}">${q(pc)}</b>`;
+  b.querySelector('[data-obox="pcsrc"]').classList.toggle("on",!H&&pc===1);
+  // ---- bne note and view switch ----
+  const rom = S.view==="rom";
+  $("bneNote").classList.toggle("show",isBne);
+  $("bneNote").innerHTML = H
+    ? (rom ? "<b>bne is not stored in this ROM.</b>" : "<b>bne is not built into this PLA.</b>")
+    : (rom
+    ? "<b>bne is not stored in this ROM.</b> This ROM holds words only for R-type, lw, sw, beq and addi, so address 000101 is an unused word."
+    : "<b>bne is not built into this PLA.</b> This PLA decodes only R-type, lw, sw, beq and addi, so opcode 000101 does not turn on any AND gate.")
+    + " To support bne, the Main Control Unit needs one more output, BranchNE. For bne, it sets Branch = 0, BranchNE = 1 and ALUOp = 01 (subtract).";
+  $("plaView").hidden = S.view!=="pla"; $("romView").hidden = S.view!=="rom";
+  $("p1title").textContent = S.view==="pla" ? "Main Control Unit (PLA)" : "Main Control Unit (ROM)";
+  const rs=$("romsvg"), hitw=ROM.find(r=>r[0]===op), vop=parseInt(op,2);
+  const word = hitw ? hitw[2] : "000000000";
+  rs.querySelector('[data-val="romaddr"]').textContent=op;
+  rs.querySelectorAll(".romrow").forEach(e=>{ const hit=e.dataset.addr===op; e.classList.toggle("hit",hit);
+    const w=e.querySelector(".rw"); w.innerHTML = (hit&&H ? "?????????" : w.dataset.word).split("").map(c=>`<tspan class="${hit&&c==="1"?"d1":""}">${c}</tspan>`).join(""); });
+  rs.querySelectorAll(".romgap").forEach(e=>{ const hit=!H&&!hitw&&vop>=parseInt(e.dataset.lo,2)&&vop<=parseInt(e.dataset.hi,2);
+    e.classList.toggle("hit",hit); e.querySelector(".gt").textContent = hit ? `${op} is here: unused word` : e.dataset.txt; });
+  [...word].forEach((c,i)=>{ paint(rs,"rom_o"+i,c==="1"?1:0,H); text(rs,"rom_o"+i,c,H);
+    rs.querySelectorAll(`[data-net="rom_o${i}"]`).forEach(e=>e.classList.toggle("x",!H&&c==="X"));
+    rs.querySelector(`[data-obox="rom_o${i}"]`).classList.toggle("on",!H&&c==="1"); });
+  $("romSel").innerHTML = hitw ? `Opcode <b>${op}</b> is the ROM address. It selects the ${hitw[1]} word: <b>${H?"?????????":hitw[2]}</b>.`
+    : H ? `Opcode <b>${op}</b> is the ROM address.` : `Opcode <b>${op}</b> is an unused ROM address` + (isBne||H ? "." : " (its word holds 0).");
+  // ---- top strip ----
+  const sv = row ? row : [...SIG.map(s=>String(P[s])),""+P.ALUOp1+P.ALUOp0,"0"];
+  const digits=v=>v.length>1?[...v].map(c=>`<i class="${c==="1"?"d1":""}">${c}</i>`).join(""):v;
+  const cell=(lbl,v)=>`<div class="c ${!H&&v.includes("1")?"one":""}"><b>${lbl}</b><span>${H?"?":digits(v)}</span></div>`;
+  const cells=[`<div class="c inst${name.length>18?" long":""}"><b>Instruction</b><span>${name}</span></div><div class="sep"></div>`];
+  SIG.forEach((s,i)=>cells.push(cell(s,sv[i])));
+  cells.push(cell("ALUOp",sv[7])); cells.push(cell("BranchNE",sv[8])+`<div class="sep"></div>`);
+  cells.push(cell("ALUControl",ac)); cells.push(cell("PCSrc",String(pc)));
+  $("sum").innerHTML=cells.join("");
+  $("xnote").classList.toggle("off", H || !sv.includes("X")); // keeps its space, so the diagrams never change size
+  $("xnote").textContent = isBne ? "X = don't care. bne writes no register, so RegDst and MemToReg do not matter."
+    : rom ? "X = don't care. The real ROM stores a 0 or a 1 in this bit." : "X = don't care. The PLA hardware outputs 0 here.";
+  // ---- the "what happened" line ----
+  let t; const zw = Z ? "(the two registers are equal)" : "(the two registers differ)";
+  if(H) t="Outputs are hidden. Predict them, then press Show outputs to check.";
+  else if(isBne) t=`The ALU Decoder gives ALUControl = 110 (subtract). Zero = ${Z} ${zw}, so NOT(Zero) = ${nz} and PCSrc = ${pc}: ${pc?"the branch is taken.":"the branch is not taken."}`;
+  else { const on=Object.keys(g).find(k=>g[k]);
+    if(!on) t = (rom ? `Opcode ${op} is an unused ROM address. In this tool, unused ROM words hold 0, so all nine outputs are 0.` : `Opcode ${op} does not turn on any AND gate, so all nine outputs are 0.`)
+      + ` ALUOp is then 00, so the ALU Decoder gives ${ac} (add), but RegWrite and MemWrite are 0, so nothing is written.`;
+    else { const outs=Object.keys(P).filter(o=>P[o]);
+      const how = S.view==="rom" ? `Opcode ${op} selects the ${GNAME[on]} word in the ROM.` : `Opcode ${op} turns on only the ${GNAME[on]} AND gate.`;
+      let alu = !RFUNCT[f]&&aluop==="10" ? `ALUOp = ${aluop}, so ALUControl = ${ac}` : `ALUOp = ${aluop}, so ALUControl = ${ac} (${ALUNAME[ac]||"not used"})`;
+      alu += aluop==="10" ? ` from funct ${f}.` : ", and Instr[5:0] is ignored (for this instruction these bits are part of the immediate).";
+      if(aluop==="10" && !RFUNCT[f]) alu += ` Funct ${f} is not one of the five supported R-type operations, so ALUControl is a don't care. The gates just happen to give ${ac} here.`;
+      t=`${how} Outputs that are 1: ${outs.join(", ")}. ${alu}`;
+      if(on==="beq") t+=` Zero = ${Z} ${zw}, so PCSrc = ${pc}: ${pc?"the branch is taken.":"the branch is not taken."}`; } }
+  $("now").textContent=t;
+}
+build(); render();
+</script></body></html>
