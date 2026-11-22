@@ -1,0 +1,2518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Five-Stage MIPS Pipeline Simulator</title>
+<style>
+:root{--bg:#ffffff;--fg:#1d2430;--panel:#ffffff;--line:#c9ced7;--muted:#4f5867;--accent:#D9762B;--accent2:#e2873e;--accent-dark:#8a4513;--accent-soft:#FBE9DA;--accent-pale:#fff7ef;
+ --blue:#1a3fb0;--blue-soft:#e4ecfd;--chip:#eef1f6;--red:#b3261e;--red-dark:#7d1410;--red-soft:#fde8e8;--yellow:#f2c14e;
+ --left:22rem;--right:25.5rem;
+ --font-ui:"Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;--font-mono:Consolas,"SF Mono",Menlo,"DejaVu Sans Mono","Courier New",monospace}
+*{box-sizing:border-box}
+/* One unit (1rem) for the whole page: it grows with the window so the text stays readable from a laptop to a 4K screen */
+html{font-size:clamp(11px,min(0.5vw + 4.6px,1.05vh + 4.7px),36px)}
+html.focus{font-size:clamp(11px,min(0.62vw + 6px,1.05vh + 4.7px),40px)}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-ui);font-size:1.1rem;padding:.45rem .9rem .3rem;display:flex;flex-direction:column;overflow:hidden}
+[hidden]{display:none !important}
+h1{font-size:1.3em;margin:0;white-space:nowrap}
+h2{font-size:1rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0}
+h3{font-size:1rem;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:.5rem 0 .2rem}
+.note{color:var(--muted);font-size:1rem;margin:.3rem 0 0;line-height:1.35}
+.mono,code{font-family:var(--font-mono)}
+code{font-size:.95em}
+sub{font-size:max(1rem,.8em);line-height:0}
+/* exponents: about 62% of the text size, raised so that the top stays inside the line */
+sup{font-size:max(.62em,7px);line-height:0;vertical-align:baseline;position:relative;top:-.62em;margin-left:.04em}
+button,select,input,textarea{font:inherit;color:var(--fg)}
+button{background:var(--panel);border:1px solid var(--line);border-radius:.45rem;padding:.3rem .7rem;cursor:pointer}
+button:hover:not(:disabled){border-color:var(--accent)}
+button:disabled{opacity:.5;cursor:default}
+button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.ttScroll:focus-visible{outline:3px solid #1a3fb0;outline-offset:1px}
+button.primary{background:var(--accent);border-color:var(--accent-dark);color:#fff;font-weight:700;text-shadow:0 0 2px rgba(0,0,0,.45)}
+button.primary.show{background:#c9a10a;border-color:#5c4a00;color:#111;text-shadow:none;border-style:dashed;border-width:2px}
+
+/* ---------- top bar (its own text unit so Focus mode does not enlarge it) ---------- */
+.top{font-size:clamp(11.5px,min(0.45vw + 5.75px,1.05vh + 5.2px),34px);display:flex;flex-wrap:wrap;align-items:center;gap:.35em .9em;margin-bottom:.45rem}
+.wideOnly{display:none}
+@media (min-width:2200px){.keys.wideOnly{display:inline}.keys.narrowOnly{display:none !important}}
+.exl{display:none;white-space:nowrap}.exs{color:var(--muted);white-space:nowrap}
+@media (min-width:1500px){.exl{display:inline;color:var(--muted)}.exs{display:none}}
+.top .grp{display:flex;align-items:center;gap:.45em}
+.top .lbl{color:var(--muted)}
+.top .lbl.note{font-size:.96em;margin:0}
+.top select{padding:.28em .3em;border:1px solid #222;border-radius:.45em;background:#fff;font-weight:700;width:22.5em;max-width:100%;min-width:0}
+.seg{display:inline-flex;border:1.5px solid #222;border-radius:1.2em;overflow:hidden}
+.seg button{border:0;border-radius:0;padding:.28em .7em;background:#fff;white-space:nowrap}
+.seg button + button{border-left:1.5px solid #222}
+.seg button[aria-pressed="true"]{background:#111;color:#fff;font-weight:700}
+/* a switch with no effect on the loaded program: gray, dashed, not clickable (its tooltip says why) */
+/* keyboard focus: a ring inside the button (the rounded group cuts off anything outside), visible on the white and on the black half */
+.seg button:focus-visible{outline:3px solid #1a3fb0;outline-offset:-3px;box-shadow:inset 0 0 0 5px #fff}
+.seg.off{border-style:dashed;border-color:#8a909a}
+.seg.off button{color:#7a808a;cursor:not-allowed;background:#f1f2f4}
+.seg.off button + button{border-left-color:#8a909a}
+.seg.off button[aria-pressed="true"]{background:#b9bec6;color:#2a2f37}
+.seg.off button:hover{border-color:transparent}
+.hidectl{margin-left:auto}
+/* one width for both labels ("Hide outputs", "Outputs hidden"), so the top bar never changes when the button is pressed */
+.hidebtn{min-width:11.9em;justify-content:center;flex:none;display:inline-flex;align-items:center;gap:.45em;background:#1d1d1d;color:var(--yellow);font-weight:800;padding:.32em .9em;border-radius:.55em;border:2px solid var(--yellow);border-bottom-width:4px;box-shadow:0 2px 6px rgba(0,0,0,.3);white-space:nowrap}
+.hidebtn:hover:not(:disabled){background:#000;border-color:var(--yellow)}
+.hidebtn[aria-pressed="true"]{background:var(--yellow);color:#1d1d1d;border-color:#1d1d1d}
+.eye{width:1.35em;height:1.35em;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;pointer-events:none}
+.eye .slash{display:none}.hidebtn[aria-pressed="true"] .eye .slash{display:inline}
+.banner{display:flex;align-items:center;gap:.7rem;margin-bottom:.45rem;padding:.25rem .8rem;font-size:1.15rem;color:var(--red-dark);border:3px double var(--red-dark);border-radius:.45rem;
+  background:repeating-linear-gradient(135deg,#fde8e8 0 .7rem,#fff 0 1.4rem)}
+.banner span{background:#fff;padding:0 .4rem;border-radius:.3rem}
+.banner .bn{margin-left:auto;font-size:1rem}
+.banner .bx{font-size:1.3rem;padding:0;background:transparent}
+
+/* the wrong mark: a white x on a black rounded square; the character inside stays for copying and screen readers */
+.wx{display:inline-block;width:1.08em;height:1.08em;line-height:1.08em;vertical-align:-.18em;border-radius:.22em;margin:0 .08em;overflow:hidden;color:transparent !important;text-shadow:none;font-weight:400;text-decoration:none;
+  background:#111 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2.3 2.3L7.7 7.7M7.7 2.3L2.3 7.7' stroke='%23fff' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E") center/100% 100% no-repeat !important;
+  -webkit-print-color-adjust:exact;print-color-adjust:exact;forced-color-adjust:none}
+
+/* ---------- three columns ---------- */
+.main{display:grid;grid-template-columns:var(--left) .7rem minmax(0,1fr) .7rem var(--right);gap:.3rem;align-items:stretch;flex:1;min-height:0}
+.gutter{cursor:col-resize;border-radius:.35rem;background:linear-gradient(var(--line),var(--line)) center/2px 60% no-repeat;align-self:stretch;touch-action:none}
+.gutter:hover,.gutter.drag{background:linear-gradient(var(--accent),var(--accent)) center/3px 100% no-repeat}
+.side{overflow:auto;min-width:0;min-height:0;display:flex;flex-direction:column;gap:.55rem}
+.center{min-width:0;min-height:0;display:flex;flex-direction:column;gap:.5rem}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:.7rem;padding:.55rem .7rem;min-width:0}
+.ph{display:flex;align-items:center;gap:.7rem;margin-bottom:.35rem}
+.ph h2{flex:none}
+.ph .ph-note{margin:0;flex:1;min-width:0}
+.ph button{margin-left:auto;flex:none}
+.focusBtn{font-weight:800;padding:.25rem .9rem;background:#111;color:#fff;border-color:#111;border-radius:1rem}
+.focusBtn:hover:not(:disabled){background:#333;border-color:#333}
+
+/* ---------- program ---------- */
+.progPanel{flex:1;min-height:0;display:flex;flex-direction:column}
+#listing{min-height:0;display:flex;flex-direction:column;flex:1}
+.prog{font-family:var(--font-mono);font-size:1.08rem;line-height:1.6;overflow-x:hidden;overflow-y:auto;min-height:3rem;flex:0 1 auto}
+/* the instruction text is never cut: it wraps when the stage tags need the room */
+.prog .ln{display:flex;gap:.45rem;align-items:center;padding:0 .3rem;border-radius:.3rem;border-left:.3rem solid transparent}
+.prog .ln.tr{cursor:pointer}
+.prog .ln.tr:hover{background:var(--chip)}
+.prog .ln.tr:focus-visible{outline:3px solid #1a3fb0;outline-offset:-3px}
+.prog .ln.live{background:var(--accent-soft);font-weight:700;border-left-color:var(--accent)}
+.prog .ln.setup,.prog .ln.label,.prog .ln.exit{color:#5b6472}
+.prog .ln.setup .tx{font-style:italic}
+.prog .bp{width:.95rem;height:.95rem;border:1.5px solid var(--muted);border-radius:50%;flex:none;padding:0;background:#fff}
+.prog .bp[aria-pressed="true"]{background:#111;border-color:#111;box-shadow:0 0 0 2px #fff,0 0 0 3.5px #111}
+.prog .nobp{width:.95rem;flex:none}
+.prog .addr{color:var(--muted);font-weight:400;min-width:5ch;flex:none}
+.prog .tx{flex:1 1 auto;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.25;padding:.2em 0}
+.bpDot{display:inline-block;width:.85em;height:.85em;border:1.5px solid var(--muted);border-radius:50%;vertical-align:-.1em;background:#fff}
+textarea{width:100%;white-space:pre;overflow:auto;font-family:var(--font-mono);font-size:1.08rem;line-height:1.4;padding:.4rem .5rem;border:1px solid var(--line);border-radius:.45rem;background:var(--panel);resize:vertical;margin-top:.3rem}
+.row{display:flex;gap:.5rem;margin-top:.35rem}
+#loadMsg.err{color:var(--red-dark);font-weight:700;font-size:1.15rem;overflow-wrap:anywhere;background:var(--red-soft);border:2px solid var(--red);border-radius:.45rem;padding:.5rem .65rem;display:flex;gap:.5rem;align-items:flex-start;margin:.35rem 0}
+#loadMsg.err .warn{font-size:1.8rem;line-height:1;flex:none}
+
+/* ---------- pipeline strip ---------- */
+.stripPanel{flex:none}
+.strip{display:flex;gap:.3rem;align-items:stretch}
+.stg{flex:1 1 0;min-width:0;border:2px solid #222;border-radius:.65rem;padding:.25rem .3rem .3rem;text-align:center;display:flex;flex-direction:column;background:#fff}
+.stg .nm{font-weight:800;font-size:1.5rem;line-height:1.1}
+.stg .hw{color:var(--muted);font-size:1rem;line-height:1.15;margin-bottom:.2rem}
+.stg .ins{font-family:var(--font-mono);font-weight:700;font-size:1.08rem;line-height:1.2;border:1px solid var(--line);border-radius:.35rem;background:#fff;padding:.15rem .2rem;min-height:2.85em;display:flex;align-items:center;justify-content:center;overflow-wrap:anywhere}
+.stg .ins.none{font-weight:400;color:var(--muted)}
+.stg .st{font-size:1.06rem;font-weight:600;line-height:1.2;margin-top:.25rem;min-height:3.6em;display:flex;align-items:center;justify-content:center;overflow-wrap:anywhere}
+.stg .st span{background:rgba(255,255,255,.88);border-radius:.25rem;padding:0 .2rem}
+.stg.stall{border:3px dashed var(--red-dark);background:repeating-linear-gradient(135deg,#f9c9c9 0 .45rem,#fff 0 .9rem)}
+.stg.flushed{border:3px dotted var(--accent-dark);background:repeating-linear-gradient(45deg,#f6cfa6 0 .3rem,#fff 0 .75rem)}
+.stg.bubble{border:2px dashed #6b7380;background:radial-gradient(#b8bec8 1px,transparent 1.3px) 0 0/.6rem .6rem #fff}
+.stg.fwd{border:4px solid var(--accent-dark);background:var(--accent-soft)}
+.stg.br{border:5px double var(--blue);background:var(--blue-soft)}
+.stg.wrong,.stg.err{border:5px solid var(--red-dark);background:#f8c4c4}
+.stg.wrong .st,.stg.err .st{color:var(--red-dark);font-weight:800}
+.stg.q{border:2px dashed #6b5600;background:#fdf3c7}
+.stg.q .ins{font-size:1.4rem}
+.preg{flex:0 0 2.3rem;padding:.2rem 0;writing-mode:vertical-rl;text-orientation:mixed;border:2px solid #222;background:#e6e9ef;border-radius:.4rem;font-weight:800;font-size:1.02rem;display:flex;align-items:center;justify-content:center;gap:.4rem;white-space:nowrap}
+.preg .i{font-weight:400}
+.preg[aria-pressed="true"]{background:#111;color:#fff}
+.preg:hover:not(:disabled){background:#fff}
+.preg[aria-pressed="true"]:hover{background:#333}
+.preg.static{cursor:default}
+/* the clock edge: the pipeline registers store their new contents (a short flash, only when a cycle is stepped) */
+.preg.pulse{animation:edge .55s ease-out 1}
+@keyframes edge{0%{box-shadow:0 0 0 .4rem var(--accent)}100%{box-shadow:0 0 0 0 rgba(217,118,43,0)}}
+@media (prefers-reduced-motion:reduce){.preg.pulse{animation:none}}
+
+/* ---------- timing table ---------- */
+.tablePanel{flex:1;min-height:9rem;display:flex;flex-direction:column}
+.ttScroll{flex:1;min-height:0;overflow:auto;border:1px solid var(--line);border-radius:.35rem;position:relative}
+.ttInner{position:relative;display:inline-block;vertical-align:top;min-width:100%}
+#arrows{position:absolute;left:0;top:0;pointer-events:none;z-index:2;overflow:visible}
+/* every size in the table is in em of the table's own text size, so the page logic can scale the whole table (--tts) to fill its panel */
+.tt{border-collapse:separate;border-spacing:0;font-size:calc(1.15rem * var(--tts,1));font-variant-numeric:tabular-nums}
+.tt th,.tt td{border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:.42em .37em;text-align:center;vertical-align:middle;min-width:var(--ccw,5.3em);width:var(--ccw,5.3em);height:2.78em;background:#fff;line-height:1.25;position:relative}
+.tt thead th{position:sticky;top:0;z-index:4;background:var(--chip);font-weight:700;height:2.5em;padding:0}
+.tt .insc{position:sticky;left:0;z-index:3;text-align:left;font-family:var(--font-mono);white-space:nowrap;width:auto;min-width:9.57em;padding:.17em .52em;border-right:2px solid #7c8492;background:#fff}
+.tt thead .insc{z-index:6;font-family:var(--font-ui);background:var(--chip);text-align:center}
+.tt .insc b{font-family:var(--font-ui)}
+/* a very long label does not widen the column: the row name wraps */
+.tt tbody .insc.long{max-width:19em;white-space:normal;overflow-wrap:anywhere}
+.tt .insc .wait{font-family:var(--font-ui);font-style:italic;white-space:normal;display:inline-block;max-width:13em;vertical-align:middle}
+.tt .insc .wp{font-family:var(--font-ui);color:var(--red-dark);font-weight:800;display:block;font-size:max(1rem,.87em)}
+.tt .flc{position:sticky;right:0;z-index:3;border-left:2px solid #7c8492;font-weight:700;min-width:4.7em;width:4.7em}
+.tt thead .flc{z-index:6;padding:0 .26em}
+.tt .cc{display:block;width:100%;height:100%;min-height:2.5em;border:0;border-radius:0;background:transparent;font-weight:700;padding:.1em 0 0;line-height:1.2}
+.tt .clk{display:block;width:100%;height:.62em;margin-top:.12em;overflow:visible}
+.tt .clk path{fill:none;stroke:currentColor;stroke-width:1.6px;vector-effect:non-scaling-stroke;stroke-linejoin:miter}
+.tt .clkl{display:block;font-size:max(1rem,.8em);font-weight:600;color:var(--muted);line-height:1.1}
+.tt .cc:hover{background:#dfe4ec}
+.tt th.cur{background:#000}
+.tt th.cur .cc{color:#fff}
+.tt th.cur .cc:hover{background:#333}
+.tt td.cur{box-shadow:inset 2px 0 0 #7a8494,inset -2px 0 0 #7a8494}
+.tt td.cur:has(+ .flc){box-shadow:inset 2px 0 0 #7a8494;border-right-color:transparent}
+.tt tbody tr:last-child td.cur{box-shadow:inset 2px 0 0 #7a8494,inset -2px 0 0 #7a8494,inset 0 -2px 0 #7a8494}
+.tt tbody tr:last-child td.cur:has(+ .flc){box-shadow:inset 2px 0 0 #7a8494,inset 0 -2px 0 #7a8494}
+.tt td small{display:block;font-size:max(1rem,.87em);line-height:1.25;font-weight:600}
+.tt td .lab{color:var(--blue);font-weight:700}
+.tt td.stall{color:var(--red-dark);font-weight:800;background:repeating-linear-gradient(135deg,#f9c9c9 0 .45rem,#fff 0 .9rem);outline:2px dashed var(--red-dark);outline-offset:-4px}
+.tt td.fwd{background:var(--accent-soft);font-weight:800;color:#5a2c0a;outline:2.5px solid var(--accent-dark);outline-offset:-4.5px}
+.tt td.br{background:var(--blue-soft);font-weight:800;color:var(--blue);outline:3.5px double var(--blue);outline-offset:-5.5px}
+.tt td.flushed{color:#6b3408;font-weight:700;background:repeating-linear-gradient(45deg,#f6cfa6 0 .3rem,#fff 0 .75rem);outline:2px dotted var(--accent-dark);outline-offset:-4px}
+.tt td.flushed s{text-decoration-thickness:2px}
+.tt td.wrong{color:var(--red-dark);font-weight:800;background:#f8c4c4;outline:4px solid var(--red-dark);outline-offset:-5px}
+/* runtime error: a DARK fill with white text, so it differs from a light "wrong" cell by brightness, not only by hue */
+.tt td.err{color:#fff;font-weight:800;background:var(--red-dark);outline:4px solid #000;outline-offset:-5px}
+.tt td.err span.bg,.tt td.err small span{background:transparent;color:#fff}
+.tt td.err .wx{box-shadow:0 0 0 1.5px #fff}
+/* a flushed instruction's bubble passing through the later stages: light gray, dotted */
+.tt td.bub{color:#6b7280;font-weight:400;background:radial-gradient(#c3c8d0 1px,transparent 1.3px) 0 0/.55rem .55rem #fbfbfc;outline:1.5px dotted #8a909a;outline-offset:-4px}
+.tt td.bub .bs{font-style:italic}
+.tt td.bub small{font-weight:400}
+.tt td.wp{color:var(--red-dark);font-weight:700}
+.tt td.q{background:#fdf3c7;font-weight:800;color:#5c4a00;font-size:1.13em}
+.tt td span.bg,.tt td small span{background:rgba(255,255,255,.88);border-radius:.2rem;padding:0 .15rem}
+.tt.tight td{padding-left:.08em;padding-right:.08em}
+.tt.tight td small span{padding:0}
+.kv .tagw.bad{color:var(--red-dark)}
+.dv{cursor:help}
+.amark text{font-family:var(--font-ui)}
+.badges{display:flex;flex-wrap:wrap;gap:.3rem .6rem;font-size:1rem;align-items:center}
+.badges:not(:empty){margin-top:.35rem}
+.badges .note{margin:0}
+.badge{min-width:0;max-width:100%;overflow-wrap:anywhere;border:1.5px solid var(--accent-dark);background:var(--accent-pale);border-radius:.35rem;padding:.05rem .45rem;font-weight:700;color:#5a2c0a}
+.controls .rsx{font-weight:400;display:none}
+@media (min-width:1700px){.controls .rsx{display:inline}}
+.badge .num{display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;box-sizing:border-box;width:1.45em;height:1.45em;line-height:1;font-variant-numeric:tabular-nums;border:1.5px solid #000;border-radius:50%;background:#fff;color:#000;font-weight:800;margin-right:.15em}
+.badges button{padding:.1rem .55rem;white-space:nowrap}
+.badges .goto{display:inline-flex;align-items:center;gap:.35rem}
+.badges .goto input{width:5.2em;padding:.1rem .3rem;border:1px solid #7c8492;border-radius:.3rem;font-family:var(--font-mono)}
+.badge.b{border-color:var(--blue);background:var(--blue-soft);color:var(--blue);border-style:double;border-width:3px}
+.key{display:flex;flex-wrap:wrap;gap:.1rem .9rem;align-items:center;font-size:1rem;color:var(--fg);margin-left:auto}
+.key .sw{display:inline-block;width:1.9rem;height:1.05rem;vertical-align:middle;margin-right:.35rem;border:1px solid var(--line)}
+.key .sw.stall{background:repeating-linear-gradient(135deg,#f9c9c9 0 .3rem,#fff 0 .6rem);border:2px dashed var(--red-dark)}
+.key .sw.fwd{background:var(--accent-soft);border:3px solid var(--accent-dark)}
+.key .sw.br{background:var(--blue-soft);border:4px double var(--blue)}
+.key .sw.flushed{background:repeating-linear-gradient(45deg,#f6cfa6 0 .25rem,#fff 0 .55rem);border:2px dotted var(--accent-dark)}
+.key .sw.cur{border:2px solid #7a8494;background:#fff}
+.key .sw.wrong{background:#f8c4c4;border:3.5px solid var(--red-dark)}
+.key .sw.bub{background:radial-gradient(#c3c8d0 1px,transparent 1.3px) 0 0/.45rem .45rem #fbfbfc;border:1.5px dotted #8a909a}
+.key .sw.err{background:var(--red-dark);border:3.5px solid #000}
+.key .sw.arrow{border:0;border-top:3px solid var(--accent-dark);height:0;width:1.5rem;position:relative;margin-right:.75rem}
+.key .sw.arrow::after{content:"";position:absolute;right:-.45rem;top:-.42rem;border:.3rem solid transparent;border-left:.5rem solid var(--accent-dark)}
+
+/* ---------- controls and Now line ---------- */
+.controls{display:flex;gap:.45rem;flex-wrap:wrap;align-items:center;flex:none}
+.controls button{white-space:nowrap}
+.controls .spd{color:var(--muted);display:flex;align-items:center;gap:.4rem}
+.controls input[type=range]{width:6.5rem;accent-color:#333}
+#speedText{min-width:6.3rem;display:inline-block;color:var(--fg)}
+.controls .keys{margin-left:auto;color:var(--muted);font-size:1rem}
+
+/* the Now box grows with its text (the table gives the room); the controls under it stay at the bottom of the column */
+.now{flex:none;padding:.4rem .8rem;background:var(--accent-soft);border-left:.4rem solid var(--accent);border-radius:.45rem;font-size:1.3rem;line-height:1.35;min-height:4.75em;max-height:11.5em;overflow:auto}
+html.focus .now{min-height:0}
+.now.more::after{content:"▼ more: scroll this box";display:block;position:sticky;bottom:-.4rem;width:max-content;margin:.15rem -.4rem -.4rem auto;padding:.05rem .5rem;background:#fff;border:1.5px solid #000;border-radius:.4rem;font-size:.82em;font-weight:700;color:#000}
+.now.err{background:var(--red-soft);border-left:.4rem double var(--red-dark);border:2px solid var(--red-dark);border-left-width:.5rem;color:var(--red-dark);font-weight:700}
+.now.predict{background:#fdf3c7;border-left:.4rem dashed #6b5600}
+.now .notice{display:block;font-weight:700}
+
+/* ---------- right column ---------- */
+.kv{display:flex;justify-content:space-between;gap:.8rem;align-items:baseline;border-bottom:1px solid #e6e9ee;padding:.16rem .1rem}
+.kv:last-child{border-bottom:0}
+.kv .k{min-width:0}
+.kv .v{font-family:var(--font-mono);font-weight:700;text-align:right;overflow-wrap:anywhere}
+.kv.chg{background:var(--accent-soft);outline:2px solid var(--accent-dark);outline-offset:-1px;border-radius:.25rem}
+.kv .tagw{font-family:var(--font-ui);font-weight:700;font-size:1rem;display:block}
+.total{margin-top:.3rem;padding:.3rem .45rem;border:2px solid #222;border-radius:.4rem;font-weight:700;line-height:1.3}
+.total.wait{border:1px dashed var(--muted);font-weight:400;color:var(--muted)}
+.kv.na .v{font-family:var(--font-ui);font-weight:400;color:var(--muted);font-size:1rem}
+.perfHead{margin:.3rem 0 .25rem}
+.total .f{display:block;font-weight:400;color:var(--muted);font-size:1rem}
+.rt-lines{margin:.15rem 0 .3rem;line-height:1.3}
+.rt-lines div + div{margin-top:.12rem}
+.tabsPanel{flex:1;min-height:8rem;display:flex;flex-direction:column;padding-top:.35rem}
+.tabs{display:flex;gap:.2rem;border-bottom:2px solid var(--line);flex:none}
+.tabs button{border:0;border-radius:.4rem .4rem 0 0;background:transparent;color:var(--muted);padding:.3rem .45rem;font-size:1.08rem;white-space:nowrap;border-bottom:.28rem solid transparent;margin-bottom:-2px}
+.tabs button[aria-selected="true"]{color:var(--fg);font-weight:800;border-bottom-color:#111;background:var(--chip)}
+.tabBody{overflow:auto;min-height:0;flex:1;padding-top:.2rem}
+.regsel{display:flex;flex-wrap:wrap;gap:.25rem;margin:.3rem 0}
+.regsel button{padding:.15rem .5rem;font-weight:700;font-family:var(--font-ui)}
+.regsel button[aria-pressed="true"]{background:#111;color:#fff;border-color:#111}
+.rt-title{font-weight:800;font-size:1.25rem;margin-top:.2rem}
+.rt-holds{margin:.1rem 0 .2rem}
+.bubbleNote{border:2px dashed #6b7380;border-radius:.4rem;padding:.4rem .5rem;margin:.3rem 0;font-weight:700}
+.sigrow{display:flex;gap:.6rem;border-bottom:1px solid #e6e9ee;padding:.16rem .1rem;align-items:baseline}
+.sigrow .k{flex:0 0 6.6rem}
+.sigrow .v{font-family:var(--font-mono);font-weight:700;display:flex;flex-wrap:wrap;gap:.1rem .7rem}
+.perfIn{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.3rem}
+.perfIn label{display:flex;flex-direction:column;font-weight:700;gap:.1rem;min-width:0}
+.perfIn input{width:100%;min-width:0;padding:.2rem .25rem;border:1px solid #7c8492;border-radius:.3rem;font-family:var(--font-mono);font-size:1.05rem}
+.perfIn input.bad{border:2px dashed var(--red-dark);background:var(--red-soft)}
+#perfMsg{color:var(--red-dark);font-weight:700;margin-top:.3rem}
+#perfMsg:empty{display:none}
+#perfMsg::before{content:"\26A0\00a0"}
+.kv .f{display:block;font-family:var(--font-ui);font-weight:400;color:var(--muted);font-size:1rem}
+footer{flex:none;margin-top:.3rem;display:flex;flex-wrap:wrap;justify-content:center;gap:0 2.5em;color:var(--muted);font-size:clamp(11px,min(0.38vw + 6.2px,0.9vh + 5.6px),28px)}
+
+/* ---------- Focus mode: the pipeline strip and the timing table fill the window ---------- */
+html.focus .side.right,html.focus .gutter,html.focus #footer,html.focus #stripHint{display:none}
+html.focus .keys.wideOnly{display:inline}html.focus .keys.narrowOnly{display:none !important}
+/* Focus keeps a slim program list (no addresses, no Edit) so the instructions stay in view */
+html.focus .main{grid-template-columns:minmax(10rem,15%) minmax(0,1fr)}
+html.focus #btnEdit,html.focus #progNote,html.focus #editor,html.focus #loadMsg,html.focus .prog .addr{display:none}
+html.focus .prog{font-size:1rem}
+html.focus .stg .st{min-height:2.5em}
+
+/* wide windows: the status line of a stage needs fewer lines */
+@media (min-width:1700px){.stg .st{min-height:2.5em}.stg .ins{min-height:1.7em}}
+@media (max-height:700px) and (min-width:1100px){.note.ph-note{display:none}body{padding-top:.3rem}.center{gap:.35rem}.panel{padding:.4rem .6rem}.ph{margin-bottom:.25rem}.banner{margin-bottom:.3rem;padding:.1rem .8rem}.top{margin-bottom:.3rem}.stg .st{min-height:3.5em}#progNote{font-size:1rem}.tt th,.tt td{padding-top:.2em;padding-bottom:.2em;height:2.5em}.tt td.wrong,.tt td.err{outline-width:3px;outline-offset:-3px;padding-top:.3em}}
+
+/* ---------- narrow windows (tablets upright, phones): one column, the page scrolls ---------- */
+/* three-column layout: the top bar is always one row (the Example box gives way first) */
+@media (max-width:1099px){.top label.grp{flex-wrap:wrap;max-width:100%}.top label.grp select{min-width:0;max-width:100%}}
+@media (min-width:1100px){.top{flex-wrap:nowrap}.top .grp{flex:none}.top label.grp{flex:0 1 auto;min-width:0}}
+@media (min-width:1100px) and (max-width:1279px){.top .lbl{display:none}.top{gap:.35em .6em}}
+@media (max-width:1099px){
+  .focusBtn,.escKey{display:none}
+  html,html.focus{font-size:14px}
+  html,body{height:auto}
+  body{overflow:auto;display:block;padding:8px 10px}
+  .top{font-size:14px}
+  .hidectl{margin-left:0}
+  .top select{max-width:calc(100vw - 9.5em - 20px)}
+  .main{display:block}
+  .gutter{display:none}
+  .side{display:block;overflow:visible}
+  .center{display:flex;flex-direction:column;gap:0;overflow:visible}
+  .stripPanel{order:1}.controls{order:2}.now{order:3}.tablePanel{order:4}
+  .panel,.controls,.now{margin-bottom:8px}
+  .prog{max-height:45vh}
+  .tablePanel{display:block}
+  .ttScroll{max-height:70vh}
+  .now{max-height:none;min-height:4.2em}
+  .tabBody{max-height:none}
+  .controls .keys{margin-left:0}
+  .stg .st{min-height:2.5em}
+  h1{white-space:normal}
+  footer{font-size:12px}
+}
+@media (max-width:699px){
+  html,html.focus{font-size:13px}
+  .top{font-size:13px}
+  .strip{flex-direction:column}
+  .preg{writing-mode:horizontal-tb;flex:none;padding:.2rem}
+  .stg .st,.stg .ins{min-height:0}
+  .stg{flex:none}
+  .ph{flex-wrap:wrap}
+  .seg button{padding:.28em .6em}
+  .perfIn{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media (max-width:699px){.tt .opnd{display:block;padding-left:.6em;white-space:nowrap}.focusBtn{display:none}.ph .ph-note{display:none}.tt .flc{position:static}.tt .insc{min-width:0;padding:.2rem .35rem}.key{margin-left:0}}
+
+.badge .num .star{width:.95em;height:.95em;display:block}
+.badge .num:not(:has(svg)){padding-top:.07em}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Five-Stage MIPS Pipeline Simulator</h1>
+  <label class="grp exgrp"><span class="exl" id="exLong">Choose an example:</span><span class="exs" id="exShort">Example</span>
+    <select id="preset" title="Load an example program with its options" aria-label="Choose an example"></select></label>
+  <div class="grp"><span class="lbl" id="lblView">View</span>
+    <div class="seg" id="segView" role="group" aria-labelledby="lblView">
+      <button type="button" data-v="problem" title="A pipeline with no hazard fixes: shows what goes wrong">Problem</button><button type="button" data-v="solution" title="The real pipeline: forwarding, stall and flush">Solution</button></div></div>
+  <div class="grp"><span class="lbl" id="lblBranch">Branch</span>
+    <div class="seg" id="segBranch" role="group" aria-labelledby="lblBranch" title="How the pipeline handles a beq">
+      <button type="button" data-v="pnt" title="Keep fetching after a branch; flush two instructions if it is taken">Predict-not-taken</button><button type="button" data-v="stall" title="Fetch nothing after a branch until its outcome is known">Always stall</button></div></div>
+  <div class="grp"><span class="lbl" id="lblMem">Memory</span>
+    <div class="seg" id="segMem" role="group" aria-labelledby="lblMem" title="One memory for instructions and data, or two separate memories">
+      <button type="button" data-v="shared" title="One memory for instructions and data: IF and MEM cannot use it in the same cycle">One shared</button><button type="button" data-v="separate" title="Two memories: an Instruction Memory for IF and a Data Memory for MEM">Two separate</button></div></div>
+  <div class="grp hidectl">
+    <button type="button" class="hidebtn" id="btnHide" aria-pressed="false" title="Hide the outputs of each new cycle so you can predict them first"><svg class="eye" viewBox="0 0 24 24" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3.2"/><path class="slash" d="M3 3l18 18"/></svg><span id="hideTxt">Hide outputs</span></button></div>
+</header>
+<div class="banner" id="banner" hidden><span class="bx"><span class="wx" role="img" aria-label="wrong">&#10007;</span></span><span><b>Problem view:</b> a pipeline with no hazard fixes. <span class="wx" role="img" aria-label="wrong">&#10007;</span> marks a wrong result or an instruction that should not run.</span><span class="bn" id="branchNote">The Branch switch works only in the Solution view, for a program with a beq.</span></div>
+
+<div class="main" id="main">
+<div class="side left">
+  <div class="panel progPanel">
+    <div class="ph"><h2>Program</h2><button type="button" id="btnEdit" title="Type or paste your own program">&#9998; Edit</button></div>
+    <div id="editor" hidden>
+      <label for="code" class="note">Type or paste a program, then press <b>Load</b>.</label>
+      <textarea id="code" rows="12" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+      <div class="row"><button type="button" class="primary" id="btnLoad">Load</button><button type="button" id="btnCancel">Cancel</button></div>
+      <p class="note">Traced instructions: <b>add, sub, and, or, slt, addi, lw, sw, beq</b>. One instruction per line, operands separated by commas. Put setup lines <b>li $reg, value</b> first: they run at once, before CC1. <b>syscall</b> ends the program. Labels, <b>#</b> comments, <b>.text</b> and <b>.globl</b> are accepted.</p>
+      <p class="note">Data, as in MARS: write <b>.data</b>, then lines such as <b>.word 7, 9</b> (decimal or 0x hex), then <b>.text</b> before the code. The first word is at 0x10010000, the next at 0x10010004, and so on. The words are in memory before CC1.</p>
+    </div>
+    <div id="loadMsg" role="alert"></div>
+    <div id="listing">
+      <div class="prog" id="prog"></div>
+      <p class="note" id="progNote" title="Addresses show the last four hex digits: 0010 is 0x00400010. Gray li and .word lines are setup: they are done before CC1.">Click a line: run to it. Click <span class="bpDot" aria-hidden="true"></span>: breakpoint for Play. Press <b>Edit</b> to type your own program.</p>
+    </div>
+  </div>
+</div>
+<div class="gutter l" id="gutL" title="Drag to resize the columns. Double-click to reset."></div>
+
+<div class="center">
+  <div class="panel stripPanel">
+    <div class="ph"><h2 id="stripTitle">Pipeline</h2><span class="note ph-note" id="stripHint">Click a register (IF/ID ...) to look inside.</span><button type="button" class="focusBtn" id="btnFocus" title="Enlarge the pipeline and the timing table to the whole window"><span id="focusTxt">&#10530; Focus</span></button></div>
+    <div class="strip" id="strip"></div>
+  </div>
+  <div class="panel tablePanel">
+    <div class="ph"><h2>Timing table</h2><div class="key" id="key"></div></div>
+    <div class="ttScroll" id="ttScroll" tabindex="0" aria-label="Timing table. When it has the keyboard focus and is wider than its panel, the Left and Right arrow keys scroll it."><div class="ttInner" id="ttInner"><table class="tt" id="tt"></table><svg id="arrows" aria-hidden="true"></svg></div></div>
+    <div class="badges" id="badges"></div>
+  </div>
+  <div class="now" id="now" aria-live="polite"></div>
+  <div class="controls">
+    <button type="button" id="btnReset" title="Back to the start, before CC1 (R). The example and the switches stay as they are.">&#8634; Reset <span class="rsx">(start over)</span></button>
+    <button type="button" id="btnPrev" title="Go back one clock cycle (Left arrow)">&#9664; Previous</button>
+    <button type="button" class="primary" id="btnNext" title="Advance one clock cycle (Space or Right arrow)">Next cycle &#9654;</button>
+    <button type="button" id="btnPlay" title="Advance automatically">&#9654; Play</button>
+    <button type="button" id="btnPause" title="Stop Play" disabled>&#10074;&#10074; Pause</button>
+    <label class="spd">Speed <input type="range" id="speed" min="0" max="6" step="1" value="3" aria-label="Play speed"><span id="speedText"></span></label>
+    <button type="button" id="btnEnd" title="Run the whole program and show the full table">Run to end &#9197;</button>
+    <span class="keys wideOnly">Keys: Space or &rarr; next &middot; &larr; previous &middot; R reset<span class="escKey"> &middot; Esc leaves Focus</span></span>
+  </div>
+</div>
+
+<div class="gutter r" id="gutR" title="Drag to resize the columns. Double-click to reset."></div>
+<div class="side right">
+  <div class="panel">
+    <h2>Counters</h2>
+    <div id="counters"></div>
+  </div>
+  <div class="panel tabsPanel">
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" data-t="values" id="tabValues">Values</button><button type="button" role="tab" data-t="register" id="tabRegister">Pipeline register</button><button type="button" role="tab" data-t="perf" id="tabPerf">Performance</button>
+    </div>
+    <div class="tabBody" id="paneValues"></div>
+    <div class="tabBody" id="paneRegister" hidden></div>
+    <div class="tabBody" id="panePerf" hidden>
+      <p class="note perfHead">Stage times in ps (picoseconds; 1 ps = 10<sup>−12</sup> s). Sample values: type your own.</p>
+      <div class="perfIn">
+        <label>IF <input type="text" inputmode="numeric" id="pIF" value="250" maxlength="7"></label>
+        <label>ID <input type="text" inputmode="numeric" id="pID" value="150" maxlength="7"></label>
+        <label>EX <input type="text" inputmode="numeric" id="pEX" value="300" maxlength="7"></label>
+        <label>MEM <input type="text" inputmode="numeric" id="pMEM" value="250" maxlength="7"></label>
+        <label>WB <input type="text" inputmode="numeric" id="pWB" value="150" maxlength="7"></label>
+      </div>
+      <div id="perfMsg" role="alert"></div>
+      <div id="perfOut"></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<footer><span class="keys narrowOnly">Keys: Space or &rarr; next &middot; &larr; previous &middot; R reset<span class="escKey"> &middot; Esc leaves Focus</span></span><span id="footer"></span></footer>
+
+<script>
+/* === CORE START === */
+/* Simulation core: assembler, machine state, cycle-by-cycle pipeline model. No DOM access. Runs in the browser and in Node.js. */
+var PipelineCore = (function(){
+"use strict";
+var VERSION = "1";
+var REG_NAMES = ["$zero","$at","$v0","$v1","$a0","$a1","$a2","$a3","$t0","$t1","$t2","$t3","$t4","$t5","$t6","$t7",
+  "$s0","$s1","$s2","$s3","$s4","$s5","$s6","$s7","$t8","$t9","$k0","$k1","$gp","$sp","$fp","$ra"];
+var TEXT_BASE = 0x00400000;
+var SP_START = 0x7FFFEFFC;
+var GP_START = 0x10008000;
+var MSG_OVERFLOW = "arithmetic overflow";
+var MSG_UNALIGNED = "address not aligned on word boundary";
+var DATA_BASE = 0x10010000;
+var MAX_DATA_WORDS = 1024;
+/* Word addresses that lw and sw may use, as in MARS 4.5 (default memory configuration). Any other aligned address stops the run
+   with the MARS message. Returns null when the address is valid. */
+function memFault(ea, write){
+  ea = toU32(ea);
+  var h = "0x" + ea.toString(16).padStart(8, "0");
+  if (ea % 4 !== 0) return (write ? "store " : "fetch ") + MSG_UNALIGNED + " " + h;      /* the exact MARS words: "fetch" for lw, "store" for sw */
+  if ((ea >= 0x10000000 && ea < 0x10400000) || (ea >= 0x7FC00000 && ea < 0x80000000) || (ea >= 0x90000000 && ea < 0x90400000) || ea >= 0xFFFF0000) return null;
+  if (ea >= 0x00400000 && ea < 0x00800000) return (write ? "Cannot write directly to text segment!" : "Cannot read directly from text segment!") + h;
+  if (ea >= 0x80000000 && ea < 0x80400000) return "DEVELOPER: You must use " + (write ? "setStatement() to write to" : "getStatement() to read from") + " kernel text segment!" + h;
+  return "address out of range " + h;
+}
+
+/* Control signals of the nine traced instructions. "X" = don't care. */
+var ISA = {
+  add:{type:"R",op:0,funct:32,ctl:{RegDst:1,ALUSrc:0,MemToReg:0,RegWrite:1,MemRead:0,MemWrite:0,Branch:0,ALUOp:"10"}},
+  sub:{type:"R",op:0,funct:34,ctl:{RegDst:1,ALUSrc:0,MemToReg:0,RegWrite:1,MemRead:0,MemWrite:0,Branch:0,ALUOp:"10"}},
+  and:{type:"R",op:0,funct:36,ctl:{RegDst:1,ALUSrc:0,MemToReg:0,RegWrite:1,MemRead:0,MemWrite:0,Branch:0,ALUOp:"10"}},
+  or: {type:"R",op:0,funct:37,ctl:{RegDst:1,ALUSrc:0,MemToReg:0,RegWrite:1,MemRead:0,MemWrite:0,Branch:0,ALUOp:"10"}},
+  slt:{type:"R",op:0,funct:42,ctl:{RegDst:1,ALUSrc:0,MemToReg:0,RegWrite:1,MemRead:0,MemWrite:0,Branch:0,ALUOp:"10"}},
+  addi:{type:"I",op:8, ctl:{RegDst:0,ALUSrc:1,MemToReg:0,RegWrite:1,MemRead:0,MemWrite:0,Branch:0,ALUOp:"00"}},
+  lw:  {type:"I",op:35,ctl:{RegDst:0,ALUSrc:1,MemToReg:1,RegWrite:1,MemRead:1,MemWrite:0,Branch:0,ALUOp:"00"}},
+  sw:  {type:"I",op:43,ctl:{RegDst:"X",ALUSrc:1,MemToReg:"X",RegWrite:0,MemRead:0,MemWrite:1,Branch:0,ALUOp:"00"}},
+  beq: {type:"I",op:4, ctl:{RegDst:"X",ALUSrc:0,MemToReg:"X",RegWrite:0,MemRead:0,MemWrite:0,Branch:1,ALUOp:"01"}}
+};
+
+function toU32(v){ return v >>> 0; }
+function toS32(v){ return v | 0; }
+function hex32(v){ return "0x" + toU32(v).toString(16).toUpperCase().padStart(8,"0"); }
+function dec(v){ return String(toS32(v)); }
+function regName(n){ return REG_NAMES[n]; }
+function signExt16(imm){ return toS32((imm & 0xFFFF) << 16 >> 16); }
+function memKey(a){ return "0x" + toU32(a).toString(16).padStart(8,"0"); }
+
+function parseReg(tok){
+  if (typeof tok !== "string") return -1;
+  var t = tok.trim().toLowerCase();
+  var i = REG_NAMES.indexOf(t);
+  if (i >= 0) return i;
+  var m = /^\$(\d{1,2})$/.exec(t);
+  if (m) { var n = parseInt(m[1],10); if (n >= 0 && n <= 31) return n; }
+  return -1;
+}
+/* Parse an integer token: decimal or 0x hex. Returns null if invalid. Hex values up to 32 bits are allowed. */
+function parseInt32(tok){
+  if (typeof tok !== "string") return null;
+  var t = tok.trim();
+  var m = /^([+-]?)0[xX]([0-9a-fA-F]{1,8})$/.exec(t);
+  if (m) { var hv = parseInt(m[2],16); return m[1] === "-" ? -hv : hv; }
+  if (/^[+-]?0\d+$/.test(t)) return null;   /* 010 would be octal in MARS: rejected here, see assemble() */
+  if (/^[+-]?\d{1,10}$/.test(t)) { var dv = parseInt(t,10); if (dv >= -2147483648 && dv <= 4294967295) return dv; return null; }
+  return null;
+}
+function looksOctal(tok){ return /^[+-]?0\d+$/.test(String(tok).trim()); }
+/* A 16-bit field: decimal -32768..32767, or a hex pattern 0x0000..0xFFFF read as a signed 16-bit pattern. */
+/* HEX_IMM_AS_PATTERN: true  = a hex immediate such as 0xFFF1 is the 16-bit two's complement pattern (-15), the way the encoded field is usually shown.
+                       false = 0xFFF1 is the unsigned number 65521, which does not fit in 16 bits signed, so Load reports an error (MARS would instead expand addi into three instructions). */
+var HEX_IMM_AS_PATTERN = true;
+function parseImm16(tok){
+  var t = tok.trim();
+  if (HEX_IMM_AS_PATTERN && /^0[xX][0-9a-fA-F]{1,4}$/.test(t)) return signExt16(parseInt(t.slice(2),16));
+  var v = parseInt32(t);
+  if (v === null) return null;
+  if (v < -32768 || v > 32767) return null;
+  return v;
+}
+
+/* assemble(text) -> {ok:true, lines:[entry], labels:{}} or {ok:false, line:n, msg:"..."} */
+function assemble(text){
+  var raw = String(text).replace(/\r\n?/g,"\n").split("\n");
+  var entries = [], labels = {}, addr = TEXT_BASE, tracedSeen = false, exitSeen = false;
+  var seg = "text", dataAddr = DATA_BASE, dataLabels = {}, data = [];
+  var i, ln;
+  function fail(lineNo,msg){ return {ok:false, line:lineNo, msg:msg}; }
+  for (i = 0; i < raw.length; i++){
+    ln = i + 1;
+    var s = raw[i].replace(/#.*$/,"").trim();
+    if (s === "") continue;
+    /* a directive this simulator does not accept (.asciiz "hi", .byte 'a', ...) gets the directive message, whatever characters follow it */
+    var dm = /^(?:[A-Za-z_$.][A-Za-z0-9_$.]*\s*:\s*)*(\.[A-Za-z_][A-Za-z0-9_]*)(?=\s|$)/.exec(s);
+    if (dm && [".data", ".word", ".text", ".globl"].indexOf(dm[1].toLowerCase()) < 0) return fail(ln, "directive " + dm[1].toLowerCase() + " is not supported (only .data, .word, .text and .globl are accepted)");
+    /* characters MIPS assembly never uses on an instruction line; catching them here keeps the later messages truthful */
+    if (s.indexOf(";") >= 0) return fail(ln, "unexpected \";\": MIPS comments start with \"#\", and instructions do not end with \";\"");
+    var badChar = /[^A-Za-z0-9_$.,():+\s-]/.exec(s);
+    if (badChar) return fail(ln, "unexpected character \"" + badChar[0] + "\"");
+    /* labels at the start of the line (one or more) */
+    var lm;
+    while ((lm = /^([A-Za-z_$.][A-Za-z0-9_$.]*)\s*:\s*/.exec(s)) !== null){
+      var name = lm[1];
+      if (labels.hasOwnProperty(name)) return fail(ln, "duplicate label \"" + name + "\"");
+      if (seg === "data"){
+        labels[name] = dataAddr; dataLabels[name] = true;
+        entries.push({line:ln, addr:dataAddr, kind:"dlabel", text:name + ":", name:name});
+      } else {
+        labels[name] = addr;
+        entries.push({line:ln, addr:addr, kind:"label", text:name + ":", name:name});
+      }
+      s = s.slice(lm[0].length);
+    }
+    if (s === "") continue;
+    if (s.charAt(0) === "."){
+      var d = s.split(/\s+/)[0].toLowerCase();
+      var drest = s.slice(d.length).trim();
+      if (d === ".globl") continue;
+      if (d === ".text"){ seg = "text"; continue; }
+      if (d === ".data"){
+        if (drest !== "") return fail(ln, ".data takes no operand here: the data section always starts at 0x10010000");
+        seg = "data"; continue;
+      }
+      if (d === ".word"){
+        if (seg !== "data") return fail(ln, ".word must be in the data section: write .data on a line before it");
+        if (drest === "") return fail(ln, ".word needs at least one value, for example .word 7");
+        var parts = drest.split(","), vals = [], shown = [];
+        for (var wi = 0; wi < parts.length; wi++){
+          var wt = parts[wi].trim();
+          if (wt === "") return fail(ln, wi === parts.length - 1 ? "the line ends after a comma; the last value is missing" : "empty value (two commas in a row?)");
+          if (/\s/.test(wt)) return fail(ln, "separate the values of .word with commas: \"" + wt + "\"");
+          if (looksOctal(wt)) return fail(ln, "value \"" + wt + "\" has a leading zero (MARS would read it as octal); write it without the zero or in 0x hex");
+          var wv = parseInt32(wt);
+          if (wv === null) return fail(ln, "bad value \"" + wt + "\" (.word accepts decimal or 0x hex numbers of 32 bits)");
+          vals.push(toS32(wv)); shown.push(wt);
+        }
+        if (data.length + vals.length > MAX_DATA_WORDS) return fail(ln, "the data section holds at most " + MAX_DATA_WORDS + " words in this simulator");
+        entries.push({line:ln, addr:dataAddr, kind:"data", text:".word " + shown.join(", "), values:vals});
+        for (wi = 0; wi < vals.length; wi++){ data.push({addr:dataAddr, val:vals[wi], line:ln}); dataAddr += 4; }
+        continue;
+      }
+      return fail(ln, "directive " + d + " is not supported (only .data, .word, .text and .globl are accepted)");
+    }
+    if (seg === "data") return fail(ln, "this line is in the data section, which accepts only .word lines; write .text on a line before the code");
+    var mm = /^([A-Za-z]+)\s*(.*)$/.exec(s);
+    if (!mm) return fail(ln, "cannot read this line");
+    var op = mm[1].toLowerCase();
+    var args = mm[2].trim() === "" ? [] : mm[2].trim().replace(/\s+\(/g, "(").split(",").map(function(a){ return a.trim(); });
+    if (args.length && args[args.length - 1] === "") return fail(ln, "the line ends after a comma; the last operand is missing");
+    for (var ai = 0; ai < args.length; ai++){
+      if (args[ai] === "") return fail(ln, "empty operand (two commas in a row?)");
+      if (/\s/.test(args[ai].replace(/\(\s*\$[A-Za-z0-9]+\s*\)/, ""))) return fail(ln, "operands must be separated by commas, and an operand may not contain spaces: \"" + args[ai] + "\"");
+    }
+    var e = {line:ln, addr:addr, kind:"instr", op:op, text:s};
+    if (op === "syscall"){
+      if (args.length !== 0) return fail(ln, "syscall takes no operands");
+      e.kind = "exit"; e.text = "syscall";
+      tracedSeen = true; exitSeen = true;      /* MARS ends the program at syscall: a li after it would never run */
+      entries.push(e); addr += 4; continue;
+    }
+    if (op === "li"){
+      if (tracedSeen) return fail(ln, "li is a setup line: put every li line before the first traced instruction" + (exitSeen ? " (syscall counts as one: the program ends there)" : ""));
+      if (args.length !== 2) return fail(ln, "li needs 2 operands: li $reg, value");
+      var lr = parseReg(args[0]); if (lr < 0) return fail(ln, "unknown register \"" + args[0] + "\"");
+      if (looksOctal(args[1])) return fail(ln, "value \"" + args[1] + "\" has a leading zero (MARS would read it as octal); write it without the zero or in 0x hex");
+      var lv = parseInt32(args[1]); if (lv === null) return fail(ln, "bad value \"" + args[1] + "\" (decimal or 0x hex, 32 bits)");
+      e.kind = "setup"; e.rt = lr; e.imm = toS32(lv); e.text = "li " + regName(lr) + ", " + args[1];
+      /* MARS assembles li as one instruction (addiu or ori) when the value fits in -32768..65535, otherwise as lui + ori (two instructions). Keep the same addresses. */
+      var s32 = toS32(lv);
+      e.size = ((lv >= -32768 && lv <= 65535) || (s32 >= -32768 && s32 <= -1)) ? 4 : 8;
+      entries.push(e); addr += e.size; continue;
+    }
+    if (!ISA.hasOwnProperty(op)) return fail(ln, "instruction \"" + op + "\" is not supported (use add, sub, and, or, slt, addi, lw, sw, beq, or li)");
+    var def = ISA[op];
+    if (def.type === "R"){
+      if (args.length !== 3) return fail(ln, op + " needs 3 operands: " + op + " $rd, $rs, $rt");
+      var rd = parseReg(args[0]), rs = parseReg(args[1]), rt = parseReg(args[2]);
+      if (rd < 0) return fail(ln, "unknown register \"" + args[0] + "\"");
+      if (rs < 0) return fail(ln, "unknown register \"" + args[1] + "\"");
+      if (rt < 0) return fail(ln, "unknown register \"" + args[2] + "\"");
+      e.rd = rd; e.rs = rs; e.rt = rt; e.shamt = 0; e.funct = def.funct;
+      e.text = op + " " + regName(rd) + ", " + regName(rs) + ", " + regName(rt);
+    } else if (op === "addi"){
+      if (args.length !== 3) return fail(ln, "addi needs 3 operands: addi $rt, $rs, imm");
+      var art = parseReg(args[0]), ars = parseReg(args[1]);
+      if (art < 0) return fail(ln, "unknown register \"" + args[0] + "\"");
+      if (ars < 0) return fail(ln, "unknown register \"" + args[1] + "\"");
+      if (looksOctal(args[2])) return fail(ln, "immediate \"" + args[2] + "\" has a leading zero (MARS would read it as octal); write it without the zero or in 0x hex");
+      var aimm = parseImm16(args[2]);
+      if (aimm === null){
+        if (parseInt32(args[2]) === null) return fail(ln, "\"" + args[2] + "\" is not a valid immediate (decimal or 0x hex)");
+        return fail(ln, "immediate \"" + args[2] + "\" does not fit in 16 bits (-32768..32767 or 0x0000..0xFFFF)");
+      }
+      e.rt = art; e.rs = ars; e.imm = aimm; e.immText = args[2];
+      e.text = "addi " + regName(art) + ", " + regName(ars) + ", " + args[2];
+    } else if (op === "lw" || op === "sw"){
+      if (args.length !== 2) return fail(ln, op + " needs 2 operands: " + op + " $rt, imm($rs)");
+      var mrt = parseReg(args[0]); if (mrt < 0) return fail(ln, "unknown register \"" + args[0] + "\"");
+      var am = /^([^()]*)\(\s*(\$[A-Za-z0-9]+)\s*\)$/.exec(args[1]);
+      if (!am) return fail(ln, "memory operand must look like imm($rs), for example 0($sp)");
+      if (am[1].trim() === "") return fail(ln, "write the offset, for example 0($sp)");
+      var mrs = parseReg(am[2]); if (mrs < 0) return fail(ln, "unknown register \"" + am[2] + "\"");
+      if (looksOctal(am[1])) return fail(ln, "offset \"" + am[1].trim() + "\" has a leading zero (MARS would read it as octal); write it without the zero or in 0x hex");
+      var mimm = parseImm16(am[1]);
+      if (mimm === null){
+        if (parseInt32(am[1]) === null) return fail(ln, "\"" + am[1].trim() + "\" is not a valid offset (decimal or 0x hex)");
+        return fail(ln, "offset \"" + am[1].trim() + "\" does not fit in 16 bits (-32768..32767 or 0x0000..0xFFFF)");
+      }
+      e.rt = mrt; e.rs = mrs; e.imm = mimm; e.immText = am[1].trim();
+      e.text = op + " " + regName(mrt) + ", " + am[1].trim() + "(" + regName(mrs) + ")";
+    } else if (op === "beq"){
+      if (args.length !== 3) return fail(ln, "beq needs 3 operands: beq $rs, $rt, label");
+      var brs = parseReg(args[0]), brt = parseReg(args[1]);
+      if (brs < 0) return fail(ln, "unknown register \"" + args[0] + "\"");
+      if (brt < 0) return fail(ln, "unknown register \"" + args[1] + "\"");
+      if (!/^[A-Za-z_$.][A-Za-z0-9_$.]*$/.test(args[2])) return fail(ln, "beq needs a label as its target (MARS also rejects a number here)");
+      e.rs = brs; e.rt = brt; e.label = args[2];
+      e.text = "beq " + regName(brs) + ", " + regName(brt) + ", " + args[2];
+    }
+    tracedSeen = true;
+    entries.push(e); addr += 4;
+  }
+  /* resolve branch labels and build machine code */
+  var setupAt = {};
+  for (i = 0; i < entries.length; i++){ if (entries[i].kind === "setup") setupAt[entries[i].addr] = true; }
+  var traced = 0;
+  for (i = 0; i < entries.length; i++){
+    var en = entries[i];
+    if (en.kind !== "instr") continue;
+    traced++;
+    if (en.op === "beq"){
+      if (!labels.hasOwnProperty(en.label)) return fail(en.line, "label \"" + en.label + "\" is not defined");
+      if (dataLabels[en.label]) return fail(en.line, "label \"" + en.label + "\" is in the data section; a branch must go to a traced instruction");
+      var off = (labels[en.label] - (en.addr + 4)) / 4;
+      if (off < -32768 || off > 32767) return fail(en.line, "branch target is too far away");
+      if (setupAt[labels[en.label]]) return fail(en.line, "label \"" + en.label + "\" is on a li setup line; a branch must go to a traced instruction");
+      en.imm = off; en.target = labels[en.label];
+    }
+    en.mc = encode(en);
+  }
+  return {ok:true, lines:entries, labels:labels, endAddr:addr, traced:traced, data:data};
+}
+
+function encode(e){
+  var d = ISA[e.op];
+  if (d.type === "R") return toU32((d.op << 26) | (e.rs << 21) | (e.rt << 16) | (e.rd << 11) | (e.shamt << 6) | e.funct);
+  return toU32((d.op << 26) | (e.rs << 21) | (e.rt << 16) | (e.imm & 0xFFFF));
+}
+
+/* Source registers that must be correct at the start of EX ($zero is never a dependence). */
+function sourcesOf(e){
+  var list;
+  if (ISA[e.op].type === "R" || e.op === "sw" || e.op === "beq") list = [e.rs, e.rt]; else list = [e.rs];
+  var out = [];
+  for (var i = 0; i < list.length; i++){ if (list[i] !== 0 && out.indexOf(list[i]) < 0) out.push(list[i]); }
+  return out;
+}
+/* Destination register number, or 0 when the instruction writes no register (sw, beq, or destination $zero). */
+function destOf(e){
+  if (ISA[e.op].type === "R") return e.rd;
+  if (e.op === "addi" || e.op === "lw") return e.rt;
+  return 0;
+}
+
+var CONTRACT_KEYS = ["loadError","runtimeError","errorCycle","total","n","lost","instances","regs","mem"];
+function contractOnly(r){
+  var o = {};
+  for (var i = 0; i < CONTRACT_KEYS.length; i++) o[CONTRACT_KEYS[i]] = r[CONTRACT_KEYS[i]];
+  return o;
+}
+
+/* run(source, options, init) -> result object (the contract keys plus "ui": extra per-cycle data for the page). */
+function run(source, options, init){
+  options = options || {};
+  var view = options.view === "problem" ? "problem" : "solution";
+  var sol = view === "solution";
+  var brStall = sol && options.branch === "stall";
+  var shared = options.memory === "shared";
+  var maxCycles = options.maxCycles > 0 ? options.maxCycles : 10000;
+  var prog = (typeof source === "string") ? assemble(source) : source;
+  var i, r;
+
+  var regs = []; for (i = 0; i < 32; i++) regs.push(0);
+  regs[29] = toS32(SP_START); regs[28] = toS32(GP_START);
+  var mem = {}, memListed = {};
+  var result = {loadError:null, runtimeError:null, errorCycle:null, total:0, n:0, lost:{loaduse:0, branch:0, memory:0},
+                instances:[], regs:regs, mem:{}};
+  if (!prog.ok){
+    result.loadError = "Line " + prog.line + ": " + prog.msg;
+    result.ui = {loadLine:prog.line, loadMsg:prog.msg};
+    return result;
+  }
+  /* the data section (.word lines) is in memory before CC1 */
+  for (i = 0; i < prog.data.length; i++){ mem[prog.data[i].addr] = prog.data[i].val; memListed[prog.data[i].addr] = true; }
+  if (init && init.regs){ for (r in init.regs){ if (init.regs.hasOwnProperty(r) && +r >= 1 && +r <= 31) regs[+r] = toS32(init.regs[r]); } }
+  if (init && init.mem){ for (r in init.mem){ if (init.mem.hasOwnProperty(r)){ mem[toU32(Number(r))] = toS32(init.mem[r]); memListed[toU32(Number(r))] = true; } } }
+
+  /* setup lines run instantly, before CC1 */
+  var instrAt = {}, startPC = null;
+  for (i = 0; i < prog.lines.length; i++){
+    var en = prog.lines[i];
+    if (en.kind === "setup"){
+      if (en.size === 8){ regs[1] = toS32((toU32(en.imm) >>> 16) << 16); }
+      if (en.rt !== 0) regs[en.rt] = toS32(en.imm);
+    } else if (en.kind === "instr" || en.kind === "exit"){
+      if (startPC === null) startPC = en.addr;
+      if (en.kind === "instr") instrAt[en.addr] = en;
+    }
+  }
+  if (startPC === null) startPC = prog.endAddr;
+
+  /* the state before CC1: the Problem-view check below runs the same program one instruction at a time from here */
+  var regs0 = regs.slice(), mem0 = {};
+  for (r in mem){ if (mem.hasOwnProperty(r)) mem0[r] = mem[r]; }
+
+  var regHist = [], memHist = {}, memTouch = [];
+  for (i = 0; i < 32; i++) regHist.push([{c:0, v:regs[i], id:0}]);
+  for (r in mem){ if (mem.hasOwnProperty(r)){ memHist[r] = [{c:0, v:mem[r], id:0}]; memTouch.push({addr:+r, c:0}); } }
+  var memSeen = {}; for (r in mem){ if (mem.hasOwnProperty(r)) memSeen[r] = true; }
+
+  var pc = startPC, c = 0, n = 0, lastWB = 0;
+  var instances = [], cycles = [null], lostAt = [];
+  var lost = result.lost, emptyInWB = 0;
+  /* Lost-cycle accounting. Every empty slot that enters the pipeline (a typed hole) is kept in "holes" with a place number:
+     "seq" grows from the front of the pipeline to the back, for instances and holes alike. A hole is one lost cycle when a
+     non-flushed instance follows it (a larger seq), and it is counted in the cycle it was created. lostWB is the older
+     tally (the hole types that pass through WB); both agree for every run that finishes. */
+  var holes = [], seqNo = 0, lostWB = {loaduse:0, branch:0, memory:0};
+  var lastW = {};          /* register -> {c, id} of the latest WB write */
+  var ifWait = {};         /* cycle -> "branchwait" | "memwait" when the IF slot was such a hole */
+  function hole(t, born, seq){
+    var h = {hole:t, born:born};
+    if (t !== "empty" && t !== "discard"){ h.seq = seq === undefined ? ++seqNo : seq; holes.push(h); }
+    return h;
+  }
+  function isInst(s){ return !!s && !s.hole; }
+  var slots = [hole("empty",0), hole("empty",0), hole("empty",0), hole("empty",0), hole("empty",0)];
+  var STAGE = ["IF","ID","EX","MEM","WB"];
+
+  function fetch(newMEM, oldIF, oldID, c1){
+    if (brStall && ((isInst(oldIF) && oldIF.e.op === "beq") || (isInst(oldID) && oldID.e.op === "beq"))){
+      var bw = hole("branchwait", c1); bw.by = (isInst(oldID) && oldID.e.op === "beq") ? oldID.id : oldIF.id; return bw;
+    }
+    var e = instrAt[pc];
+    if (!e) return hole("empty", c1);
+    if (shared && isInst(newMEM) && (newMEM.e.op === "lw" || newMEM.e.op === "sw")){ var mw = hole("memwait", c1); mw.by = newMEM.id; return mw; }
+    var inst = {id:instances.length + 1, seq:++seqNo, pc:pc, e:e, text:e.text, cells:{}, flushed:false, fwd:{}, stale:[], ignoredTaken:false,
+      ifC:c1, firstC:c1, idFirst:0, idLast:0, exC:0, memC:0, wbC:0, flushedAt:0, heldAt:{}, waitKind:{}, refetchC:0, collide:null,
+      dest:destOf(e), src:[], discardedAt:0, rfNew:{}, rfRs:0, rfRt:0, a:0, b:0, alu:0, zero:0, taken:false, storeVal:0, memAddr:0, loaded:0, writeVal:0,
+      fwdOut:[], staleInfo:[], stalledFor:null, error:null};
+    instances.push(inst);
+    pc = toU32(pc + 4);
+    /* the waiting cycles just before this fetch belong to this row; a wait that ended in a flush belonged to a
+       wrong-path instruction that was never fetched, so it is not part of the row of the branch target */
+    var k = c1 - 1;
+    while (k >= 1 && (ifWait[k] === "branchwait" || ifWait[k] === "memwait") && !cycles[k + 1].flushHere){
+      inst.cells[k] = "stall"; inst.waitKind[k] = ifWait[k]; inst.firstC = k; cycles[k].waitRow = inst.id; k--;
+    }
+    return inst;
+  }
+  var fault = null;        /* {c, id, msg, where} once an instruction has faulted */
+  function fail(msg, inst, where){
+    fault = {c:c, id:inst.id, msg:msg, where:where};
+    inst.error = msg;
+    cycles[c].error = {msg:msg, id:inst.id, where:where};
+  }
+
+  /* Everything that happens during clock cycle c. A fault is recorded in "fault"; the main loop then drains the older instructions. */
+  function process(){
+    var rec = cycles[c], s, k, src;
+    /* table cells of this cycle */
+    for (k = 0; k < 5; k++){
+      s = slots[k];
+      if (isInst(s)) s.cells[c] = s.heldAt[c] ? "stall" : STAGE[k];
+    }
+    if (!isInst(slots[0]) && (slots[0].hole === "branchwait" || slots[0].hole === "memwait")) ifWait[c] = slots[0].hole;
+    rec.ifHole = isInst(slots[0]) ? "" : slots[0].hole;
+    /* WB: first half of the cycle */
+    s = slots[4];
+    if (isInst(s)){
+      s.wbC = c; n++; lastWB = c;
+      if (s.dest !== 0){
+        rec.regWrite = {reg:s.dest, old:regs[s.dest], val:s.writeVal, id:s.id};
+        regs[s.dest] = s.writeVal; lastW[s.dest] = {c:c, id:s.id};
+        regHist[s.dest].push({c:c, v:s.writeVal, id:s.id});
+      }
+    } else if (c >= 5){
+      if (s.hole === "loaduse") lostWB.loaduse++;
+      else if (s.hole === "flush" || s.hole === "branchwait") lostWB.branch++;
+      else if (s.hole === "memwait") lostWB.memory++;
+      else emptyInWB++;
+    }
+    /* ID: second half of the cycle (a WB write of this cycle is already visible) */
+    s = slots[1];
+    if (isInst(s)){
+      if (!s.idFirst) s.idFirst = c;
+      s.idLast = c;
+      s.rfRs = regs[s.e.rs]; s.rfRt = regs[s.e.rt];
+      s.rfNew = {};
+      src = sourcesOf(s.e);
+      /* "reads the new value": written in the first half of this cycle, and no older instruction in EX or MEM writes the same register
+         (then the value read here is already out of date and the newer one is forwarded later) */
+      for (k = 0; k < src.length; k++){
+        if (lastW[src[k]] && lastW[src[k]].c === c && !(isInst(slots[2]) && slots[2].dest === src[k]) && !(isInst(slots[3]) && slots[3].dest === src[k])) s.rfNew[src[k]] = lastW[src[k]].id;
+      }
+      if (!sol){
+        s.stale = []; s.staleInfo = [];
+        for (k = 0; k < src.length; k++){
+          /* the newest older in-flight writer of this register, if any, has not written it yet */
+          var prod = null;
+          if (isInst(slots[2]) && slots[2].dest === src[k]) prod = slots[2];
+          else if (isInst(slots[3]) && slots[3].dest === src[k]) prod = slots[3];
+          if (prod){ s.stale.push(regName(src[k])); s.staleInfo.push({reg:src[k], oldVal:regs[src[k]], from:prod.id}); }
+        }
+      }
+    }
+    /* MEM */
+    s = slots[3];
+    if (isInst(s)){
+      s.memC = c;
+      if (s.e.op === "lw" || s.e.op === "sw"){
+        var ea = toU32(s.alu), mf = memFault(ea, s.e.op === "sw");
+        s.memAddr = ea;
+        if (mf){ fail(mf, s, "MEM"); return true; }   /* younger instructions (EX) do nothing more */
+        if (!memSeen[ea]){ memSeen[ea] = true; memTouch.push({addr:ea, c:c}); memHist[ea] = [{c:0, v:0, id:0}]; }
+        if (s.e.op === "lw"){
+          s.loaded = mem.hasOwnProperty(ea) ? mem[ea] : 0; s.writeVal = s.loaded;
+          rec.memRead = {addr:ea, val:s.loaded, id:s.id};
+        } else {
+          rec.memWrite = {addr:ea, old:mem.hasOwnProperty(ea) ? mem[ea] : 0, val:s.storeVal, id:s.id};
+          mem[ea] = s.storeVal; memListed[ea] = true;
+          memHist[ea].push({c:c, v:s.storeVal, id:s.id});
+        }
+      }
+    }
+    /* EX */
+    s = slots[2];
+    if (isInst(s)){
+      s.exC = c;
+      var e = s.e, vals = {};
+      vals[0] = 0;
+      src = sourcesOf(e);
+      for (k = 0; k < src.length; k++){
+        r = src[k];
+        var rfVal = (r === e.rs) ? s.rfRs : s.rfRt, info;
+        if (sol){
+          var m = slots[3], w = slots[4];
+          if (isInst(m) && m.dest === r){
+            if (m.e.op === "lw") throw new Error("internal: load-use hazard was not stalled");
+            info = {reg:r, path:"P1", val:m.alu, from:m.id, rfVal:rfVal};
+            m.fwdOut.push({to:s.id, path:"P1", c:c, reg:r});
+          } else if (isInst(w) && w.dest === r){
+            info = {reg:r, path:"P2", val:w.writeVal, from:w.id, rfVal:rfVal};
+            w.fwdOut.push({to:s.id, path:"P2", c:c, reg:r});
+          } else if (s.rfNew[r]){
+            info = {reg:r, path:"RFNEW", val:rfVal, from:s.rfNew[r], rfVal:rfVal};
+          } else {
+            info = {reg:r, path:"RF", val:rfVal, from:0, rfVal:rfVal};
+          }
+          s.fwd[regName(r)] = info.path;
+        } else {
+          info = {reg:r, path:"RF", val:rfVal, from:0, rfVal:rfVal};
+        }
+        s.src.push(info); vals[r] = info.val;
+      }
+      var a = vals[e.rs], rtv = vals[e.rt];
+      if (a === undefined) a = (e.rs === 0) ? 0 : s.rfRs;
+      if (rtv === undefined) rtv = (e.rt === 0) ? 0 : s.rfRt;
+      var b = ISA[e.op].ctl.ALUSrc === 1 ? signExt16(e.imm) : rtv;
+      var res = 0, ovf = false, wide;
+      switch (e.op){
+        case "add": case "addi": wide = a + b; ovf = (wide > 2147483647 || wide < -2147483648); res = toS32(wide); break;
+        case "lw": case "sw": res = toS32(a + b); break;
+        case "sub": wide = a - b; ovf = (wide > 2147483647 || wide < -2147483648); res = toS32(wide); break;
+        case "beq": res = toS32(a - b); break;
+        case "and": res = toS32(a & b); break;
+        case "or":  res = toS32(a | b); break;
+        case "slt": res = (a < b) ? 1 : 0; break;
+      }
+      s.a = a; s.b = b; s.rtUsed = rtv; s.alu = res; s.zero = (res === 0) ? 1 : 0; s.storeVal = rtv; s.writeVal = res;
+      if (ovf){ fail(MSG_OVERFLOW, s, "EX"); return true; }
+      if (e.op === "beq"){
+        s.taken = (a === rtv);
+        rec.resolve = {id:s.id, taken:s.taken, a:a, b:rtv, flushed:[], target:e.target, label:e.label, targetId:0};
+        if (!sol){
+          s.ignoredTaken = s.taken;
+        }
+      }
+    }
+    return true;
+  }
+
+  /* The clock edge from cycle c to c + 1: every decision uses the state of cycle c. */
+  function edge(){
+    var x = slots[2], d = slots[1], f = slots[0], c1 = c + 1, ns, k;
+    var rec = {c:c1, slots:null, stall:null, resolve:null, fetched:0, ifHole:"", regWrite:null, memWrite:null, memRead:null, error:null, waitRow:0, flushHere:null, refetch:null};
+    cycles.push(rec);
+    var taken = sol && isInst(x) && x.e.op === "beq" && x.taken;
+    if (taken) pc = x.e.target;
+    var loadUse = null;
+    if (sol && !(taken && !brStall) && isInst(d) && isInst(x) && x.e.op === "lw" && x.dest !== 0 && sourcesOf(d.e).indexOf(x.dest) >= 0) loadUse = x;
+    if (taken && !brStall){
+      var prev = cycles[c];
+      /* The two fetch slots after the branch (ID first: it is the older one) are emptied. An instruction is flushed. A slot with
+         nothing left to fetch becomes a flush hole too. A slot that is already an empty slot of the shared memory (the fetch was
+         blocked) stays what it is: that lost cycle was counted when it happened and is not counted again. */
+      var two = [d, f], names = ["ID","IF"], nh = [null, null];
+      rec.flushHere = {beq:x.id, ids:[], waits:0, empties:0};
+      for (k = 0; k < 2; k++){
+        if (isInst(two[k])){
+          two[k].flushed = true; two[k].flushedAt = c;
+          two[k].cells[c] = "flushed:" + names[k];
+          prev.resolve.flushed.push(two[k].id);
+          nh[k] = hole("flush", c1, two[k].seq); nh[k].from = two[k].id; nh[k].by = x.id;
+        } else if (two[k].hole === "memwait"){
+          nh[k] = two[k]; nh[k].flushedBy = x.id; rec.flushHere.waits++;
+        } else {
+          nh[k] = hole("flush", c1); nh[k].from = 0; nh[k].by = x.id; rec.flushHere.empties++;
+        }
+      }
+      prev.resolve.flushed.reverse();      /* in fetch order */
+      rec.flushHere.ids = prev.resolve.flushed.slice();
+      ns = [null, nh[1], nh[0], x, slots[3]];
+      ns[0] = fetch(ns[3], null, null, c1);
+    } else if (loadUse){
+      d.heldAt[c1] = true; d.stalledFor = {reg:loadUse.dest, lw:loadUse.id, c:c1};
+      if (isInst(f)){
+        f.heldAt[c1] = true;
+        /* IF is not told about the stall: it reads the held instruction from memory again in the stall cycle. With one shared
+           memory that read collides with the lw, which is in MEM in the same cycle, so the instruction is fetched once more
+           in the next cycle (see the next clock edge). */
+        if (shared) f.collide = {c:c1, by:loadUse.id};
+      }
+      rec.stall = {id:d.id, ifId:isInst(f) ? f.id : 0, reg:loadUse.dest, lw:loadUse.id, collide:!!(shared && isInst(f))};
+      ns = [f, d, hole("loaduse", c1, d.seq - 0.5), x, slots[3]];
+      ns[2].from = d.id; ns[2].by = loadUse.id;
+    } else if (isInst(f) && f.collide && f.collide.c === c){
+      /* the fetch that collided with the lw in the stall cycle is repeated: the instruction stays in IF and an empty slot
+         (lost to the shared memory) moves on in its place */
+      var rh = hole("memwait", c1, f.seq - 0.5); rh.by = f.collide.by; rh.re = f.id;
+      f.refetchC = c1;
+      rec.refetch = {id:f.id, by:f.collide.by};
+      ns = [f, rh, d, x, slots[3]];
+    } else {
+      ns = [null, f, d, x, slots[3]];
+      ns[0] = fetch(ns[3], f, d, c1);
+    }
+    if (isInst(ns[0]) && ns[0].ifC === c1){
+      rec.fetched = ns[0].id;
+      if (taken && cycles[c].resolve) cycles[c].resolve.targetId = ns[0].id;
+    }
+    if (brStall && isInst(x) && x.e.op === "beq" && cycles[c].resolve && isInst(ns[0]) && ns[0].ifC === c1) cycles[c].resolve.targetId = ns[0].id;
+    slots = ns;
+    rec.slots = ns.map(function(s){ return isInst(s) ? {id:s.id} : {hole:s.hole, from:s.from || 0, by:s.by || 0, born:s.born, re:s.re || 0, flushedBy:s.flushedBy || 0}; });
+    c = c1;
+  }
+
+  function busy(){ for (var k = 0; k < 4; k++){ if (isInst(slots[k])) return true; } return false; }
+  var guard = false;
+  while (true){
+    if (!busy() && !instrAt[pc]) break;
+    if (c === maxCycles){
+      result.runtimeError = "Stopped after " + maxCycles + " clock cycles (is there an endless loop?)";
+      result.errorCycle = c; guard = true;
+      if (cycles[c]) cycles[c].error = {msg:result.runtimeError, id:0, where:"guard"};
+      break;
+    }
+    edge();
+    process();
+    if (fault){
+      /* Precise stop: the faulting instruction and every younger one are discarded and nothing more is fetched.
+         Older instructions complete. Only an instruction in MEM can still be on its way (overflow is found in EX): it finishes WB in the next cycle. */
+      var older = fault.where === "EX" && isInst(slots[3]) ? slots[3] : null;
+      for (i = 0; i < 4; i++){ if (isInst(slots[i]) && slots[i] !== older) slots[i].discardedAt = c; }
+      if (older){
+        var dr = [hole("discard", c + 1), hole("discard", c + 1), hole("discard", c + 1), hole("discard", c + 1), older];
+        dr[3].from = fault.id;
+        cycles.push({c:c + 1, slots:dr.map(function(s){ return isInst(s) ? {id:s.id} : {hole:s.hole, from:s.from || 0, by:fault.id, born:s.born, re:0, flushedBy:0}; }),
+          stall:null, resolve:null, fetched:0, ifHole:"discard", regWrite:null, memWrite:null, memRead:null, error:null, waitRow:0, flushHere:null, refetch:null});
+        slots = dr; c = c + 1;
+        var keepFault = fault; fault = null; process(); fault = keepFault;
+      }
+      result.runtimeError = fault.msg; result.errorCycle = c;
+      cycles[c].stop = fault;
+      break;
+    }
+  }
+
+  /* ---- Problem view only (page data, not part of the contract): which instances should not run and which results are wrong ----
+     The same program is run one instruction at a time (the correct execution). The fetched instances are matched to it in
+     fetch order: an instance whose PC is the next PC of the correct execution is "on the correct path"; any other instance
+     is on the wrong path (it should not run). An on-path instance is wrong when its result (register value, stored word and
+     address, loaded word, branch outcome) differs from the correct one. */
+  function correctTrace(limit){
+    var R = regs0.slice(), M = {}, p = startPC, out = [], k2;
+    for (k2 in mem0){ if (mem0.hasOwnProperty(k2)) M[k2] = mem0[k2]; }
+    while (out.length < limit && instrAt[p]){
+      var e2 = instrAt[p], a2 = R[e2.rs], b2 = R[e2.rt], t = {pc:p, a:a2, b:b2, res:null, store:null, addr:null, taken:false, error:false}, nx = toU32(p + 4), wide2, ea2;
+      switch (e2.op){
+        case "add": wide2 = a2 + b2; if (wide2 > 2147483647 || wide2 < -2147483648) t.error = true; t.res = toS32(wide2); break;
+        case "addi": wide2 = a2 + signExt16(e2.imm); if (wide2 > 2147483647 || wide2 < -2147483648) t.error = true; t.res = toS32(wide2); break;
+        case "sub": wide2 = a2 - b2; if (wide2 > 2147483647 || wide2 < -2147483648) t.error = true; t.res = toS32(wide2); break;
+        case "and": t.res = toS32(a2 & b2); break;
+        case "or": t.res = toS32(a2 | b2); break;
+        case "slt": t.res = (a2 < b2) ? 1 : 0; break;
+        case "lw": case "sw":
+          ea2 = toU32(toS32(a2 + signExt16(e2.imm))); t.addr = ea2;
+          if (memFault(ea2, e2.op === "sw")){ t.error = true; break; }
+          if (e2.op === "lw") t.res = M.hasOwnProperty(ea2) ? M[ea2] : 0; else { t.store = b2; M[ea2] = b2; }
+          break;
+        case "beq": t.taken = (a2 === b2); if (t.taken) nx = toU32(e2.target); break;
+      }
+      out.push(t);
+      if (t.error) break;
+      if (ISA[e2.op].ctl.RegWrite === 1 && destOf(e2) !== 0) R[destOf(e2)] = t.res;
+      p = nx;
+    }
+    return out;
+  }
+  function writerAt(hist, cyc){ var id2 = 0; for (var q = 1; q < hist.length; q++){ if (hist[q].c <= cyc) id2 = hist[q].id; else break; } return id2; }
+  if (!sol){
+    var T = correctTrace(instances.length + 1), tj = 0, lastOn = null, taint = {};
+    for (i = 0; i < instances.length; i++){
+      var pi = instances[i], pv = {onPath:false, cause:0, knownC:0, wrong:false, at:"", reason:null, neutral:false, corr:null, ignored:false, tainted:false, staleBad:[]};
+      pi.pv = pv;
+      if (tj < T.length && pi.pc === T[tj].pc){ pv.onPath = true; pv.corr = T[tj]; tj++; lastOn = pi; }
+      else { pv.cause = lastOn ? lastOn.id : 0; pv.knownC = lastOn ? lastOn.exC : 0; pv.tainted = true; taint[pi.id] = true; continue; }
+      var op = pi.e.op, cr = pv.corr, ran = pi.exC > 0 && !(pi.error && fault && fault.where === "EX" && fault.id === pi.id);
+      if (!ran) continue;
+      if (op === "beq"){ pv.wrong = pi.taken !== cr.taken; pv.at = "EX"; pv.ignored = cr.taken; }
+      else if (op === "sw"){ pv.wrong = cr.error || pi.storeVal !== cr.store || toU32(pi.alu) !== cr.addr; pv.at = "EX"; }
+      else if (op === "lw"){
+        if (pi.memC > 0 && !pi.error){ pv.wrong = cr.error || (pi.dest !== 0 && pi.loaded !== cr.res); pv.at = "MEM"; }
+      } else { pv.wrong = cr.error || (pi.dest !== 0 && pi.writeVal !== cr.res); pv.at = "EX"; }
+      /* An old value read in ID counts only when its producer is on the correct path. It is a cause of a wrong result only
+         when it differs from the value the correct execution uses. */
+      var onStale = pi.staleInfo.filter(function(q){ return instances[q.from - 1].pv.onPath; });
+      pv.staleBad = onStale.filter(function(q){ return q.oldVal !== (q.reg === pi.e.rs ? cr.a : cr.b); });
+      if (pv.wrong && pv.staleBad.length){
+        pv.reason = {kind:"stale", reg:pv.staleBad[0].reg, oldVal:pv.staleBad[0].oldVal, from:pv.staleBad[0].from};
+      } else if (!pv.wrong && onStale.length){
+        pv.neutral = {reg:onStale[0].reg, oldVal:onStale[0].oldVal};
+      } else if (pv.wrong){
+        var srcs = sourcesOf(pi.e), wid;
+        for (r = 0; r < srcs.length && !pv.reason; r++){
+          wid = writerAt(regHist[srcs[r]], pi.idLast);
+          if (wid && taint[wid]) pv.reason = {kind:"taint", from:wid, reg:srcs[r]};
+        }
+        if (!pv.reason && op === "lw" && memHist[pi.memAddr]){
+          wid = writerAt(memHist[pi.memAddr], pi.memC);
+          if (wid && taint[wid]) pv.reason = {kind:"taint", from:wid, mem:pi.memAddr};
+        }
+        if (!pv.reason) pv.reason = {kind:"other"};
+      }
+      if (pv.wrong && op !== "beq"){ pv.tainted = true; taint[pi.id] = true; }
+    }
+  }
+
+  /* lost cycles: every hole that a non-flushed instance follows, counted in the cycle it was created
+     (an always-stall wait: in the cycle after its branch resolved, when the wait is known to have cost a cycle) */
+  var lastSeq = 0;
+  for (i = 0; i < instances.length; i++){ if (!instances[i].flushed && instances[i].seq > lastSeq) lastSeq = instances[i].seq; }
+  for (i = 0; i < holes.length; i++){
+    var hh = holes[i];
+    if (!(hh.seq < lastSeq)) continue;
+    var ty = hh.hole === "loaduse" ? "loaduse" : hh.hole === "memwait" ? "memory" : "branch";
+    lost[ty]++;
+    lostAt.push({c:hh.hole === "branchwait" ? instances[hh.by - 1].exC + 1 : hh.born, type:ty});
+  }
+  lostAt.sort(function(a, b){ return a.c - b.c; });
+  result.n = n;
+  result.total = result.runtimeError ? result.errorCycle : lastWB;
+  for (i = 0; i < instances.length; i++){
+    var it = instances[i], cells = {};
+    for (r in it.cells){ if (it.cells.hasOwnProperty(r)) cells[r] = it.cells[r]; }
+    result.instances.push({id:it.id, pc:"0x" + toU32(it.pc).toString(16).padStart(8,"0"), text:it.text, cells:cells, flushed:it.flushed,
+      fwd:it.fwd, stale:it.stale, ignoredTaken:it.ignoredTaken});
+  }
+  for (r in memListed){ if (memListed.hasOwnProperty(r)) result.mem[memKey(+r)] = toS32(mem[r]); }
+  result.ui = {prog:prog, view:view, branch:brStall ? "stall" : "pnt", memory:shared ? "shared" : "separate", inst:instances, cycles:cycles,
+    fault:fault, regHist:regHist, memHist:memHist, memTouch:memTouch, lostAt:lostAt, lostWB:lostWB, emptyInWB:emptyInWB, guard:guard,
+    last:c};
+  return result;
+}
+
+return {VERSION:VERSION, REG_NAMES:REG_NAMES, ISA:ISA, TEXT_BASE:TEXT_BASE, HEX_IMM_AS_PATTERN:HEX_IMM_AS_PATTERN,
+  toU32:toU32, toS32:toS32, hex32:hex32, dec:dec, regName:regName, signExt16:signExt16, memKey:memKey,
+  parseReg:parseReg, parseInt32:parseInt32, parseImm16:parseImm16, assemble:assemble, encode:encode,
+  sourcesOf:sourcesOf, destOf:destOf, memFault:memFault, DATA_BASE:DATA_BASE, run:run, contractOnly:contractOnly, CONTRACT_KEYS:CONTRACT_KEYS};
+})();
+if (typeof module !== "undefined" && module.exports) module.exports = PipelineCore;
+/* === CORE END === */
+</script>
+<script>
+/* Page logic: reads the result of PipelineCore.run() and draws the program, the pipeline strip, the timing table, the Now line and the right column. */
+(function(){
+"use strict";
+var C = PipelineCore;
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+var rn = C.regName;
+/* The wrong mark: the character stays in the text (copy, search, tests), but it is drawn as a white x on a black square (style.css .wx). */
+var WX = "<span class=\"wx\" role=\"img\" aria-label=\"wrong\">✗</span>";
+function wx(h){ return String(h).replace(/✗/g, WX); }
+/* a data value as text: always a signed decimal number (hex is used only for addresses and machine code) */
+function val(v){ return String(C.toS32(v)).replace("-", "−"); }
+/* the same value for the right column: pointing at it shows the 32-bit pattern in hex */
+function valH(v){ return "<span class=\"dv\" title=\"" + C.hex32(v) + " in hex\">" + val(v) + "</span>"; }
+
+var SPEEDS = [8000, 5000, 3000, 2000, 1200, 700, 350];
+var STAGES = ["IF","ID","EX","MEM","WB"];
+var HARDWARE = ["Instruction Memory","Register File (read)","ALU","Data Memory","Register File (write)"];
+var SHARED_NAME = "Memory (shared)";   /* IF and MEM use the same memory when Memory = One shared */
+var PREGS = ["IF/ID","ID/EX","EX/MEM","MEM/WB"];
+
+var PRESETS = [
+  {name:"1. Ideal pipeline", opt:{view:"solution", branch:"pnt", memory:"separate"},
+   src:"# Five independent instructions: no hazard.\nli $s0, 1\nli $s1, 2\nli $s2, 30\nli $s3, 4\nadd $t0, $s0, $s1\nsub $t1, $s2, $s3\nand $t2, $s2, $s3\nor $t3, $s0, $s3\nslt $t4, $s0, $s2\n"},
+  {name:"2. Structural hazard", opt:{view:"solution", branch:"pnt", memory:"shared"},
+   src:"# One shared memory: sw uses it in MEM in CC4 and lw in CC5,\n# so the fourth instruction cannot be fetched in CC4 or CC5.\nli $s0, 0x10010000\nli $s1, 6\nli $s2, 2\nli $t0, 7\nsw $s1, 0($s0)\nlw $t0, 0($s0)\nadd $t1, $s1, $s2\nsub $t2, $s1, $s2\nor $t3, $s1, $s2\n"},
+  {name:"3. RAW forwarding", opt:{view:"solution", branch:"pnt", memory:"separate"},
+   src:"# sub, and, or all need $s1 (1, 2 and 3 instructions after add).\n# $s1 holds the old value 20; add writes 9.\nli $s1, 20\nli $s2, 5\nli $s3, 4\nli $t1, 1\nli $t3, 12\nadd $s1, $s2, $s3\nsub $t0, $s1, $t1\nand $t2, $s1, $t3\nor $t4, $s1, $s2\n"},
+  {name:"4. Load-use stall", opt:{view:"solution", branch:"pnt", memory:"separate"},
+   src:"# sub needs $s1 right after lw loads it: one stall.\n# sw first puts 9 in memory; $s1 holds the old value 6.\nli $s0, 0x10010000\nli $s1, 6\nli $t1, 4\nli $t2, 9\nsw $t2, 0($s0)\nlw $s1, 0($s0)\nsub $t0, $s1, $t1\nadd $t3, $t1, $t2\n"},
+  {name:"5. Compiler reordering: before", opt:{view:"solution", branch:"pnt", memory:"separate"},
+   src:"# Before reordering: sub follows lw directly.\n# sw first puts 20 in memory; $s1 holds the old value 7.\nli $s0, 0x10010000\nli $s1, 7\nli $t1, 6\nli $t3, 2\nli $t4, 3\nli $t5, 20\nsw $t5, 0($s0)\nlw $s1, 0($s0)\nsub $t0, $s1, $t1\nadd $t2, $t3, $t4\n"},
+  {name:"6. Compiler reordering: after", opt:{view:"solution", branch:"pnt", memory:"separate"},
+   src:"# After reordering: add moves between lw and sub.\n# sw first puts 20 in memory; $s1 holds the old value 7.\nli $s0, 0x10010000\nli $s1, 7\nli $t1, 6\nli $t3, 2\nli $t4, 3\nli $t5, 20\nsw $t5, 0($s0)\nlw $s1, 0($s0)\nadd $t2, $t3, $t4\nsub $t0, $s1, $t1\n"},
+  {name:"7. Taken branch", opt:{view:"solution", branch:"pnt", memory:"separate"},
+   src:"# $t0 equals $t1: the branch is taken.\n# $s0 holds the old value 10; add writes 6.\nli $s0, 10\nli $t0, 3\nli $t1, 3\nadd $s0, $t0, $t1\nbeq $t0, $t1, SKIP\nsub $s1, $s0, $t0\nor $s2, $s0, $t1\nSKIP: add $s4, $s0, $s0\n"},
+  {name:"8. Not-taken branch", opt:{view:"solution", branch:"pnt", memory:"separate"},
+   src:"# $t0 differs from $t1: the branch is not taken.\n# $s0 holds the old value 10; add writes 7.\nli $s0, 10\nli $t0, 3\nli $t1, 4\nadd $s0, $t0, $t1\nbeq $t0, $t1, SKIP\nsub $s1, $s0, $t0\nor $s2, $s0, $t1\nSKIP: add $s4, $s0, $s0\n"},
+  {name:"9. All hazards together", opt:{view:"solution", branch:"pnt", memory:"separate"},
+   src:"# Forwarding, a load-use stall and a taken branch in one program.\n# $t2 and $t5 hold the old values 9 and 2.\nli $s0, 0x10010000\nli $t0, 5\nli $t1, 7\nli $t2, 9\nli $t5, 2\nsw $t1, 0($s0)\nadd $t2, $t0, $t1\nsub $t3, $t2, $t0\nor $t4, $t0, $t1\nlw $t5, 0($s0)\nadd $t6, $t5, $t0\nand $t7, $t0, $t1\nbeq $t3, $t1, TARGET\nadd $s1, $t0, $t0\nadd $s2, $t0, $t0\nTARGET: add $s3, $t0, $t1\n"}
+];
+
+var S = {src:"", opt:{view:"solution", branch:"pnt", memory:"separate"}, res:null, U:null, cur:0, reached:0, revealed:true, hide:false,
+         sel:"ID/EX", tab:"values", bps:{}, editing:false, timer:null, note:"", regsUsed:[], firstWB:0, lastFetch:0, rows:[], atNote:false};
+function I(id){ return S.U.inst[id - 1]; }
+function nm(inst){ return "I" + inst.id; }
+function nmop(inst){ return "I" + inst.id + " (<code>" + inst.e.op + "</code>)"; }
+function sol(){ return S.U.view === "solution"; }
+function atEnd(){ return S.cur >= S.U.last; }
+/* newest cycle whose outputs are visible */
+function vis(){ return S.revealed ? S.reached : S.reached - 1; }
+function curHidden(){ return !S.revealed; }
+function isFocus(){ return document.documentElement.classList.contains("focus"); }
+
+/* ---------------- loading ---------------- */
+function load(src, opt){
+  var res = C.run(src, {view:opt.view, branch:opt.branch, memory:opt.memory, maxCycles:10000});
+  var box = $("loadMsg");
+  if (res.loadError){
+    box.className = "err"; box.setAttribute("data-line", res.ui.loadLine);
+    box.innerHTML = "<span class=\"warn\" aria-hidden=\"true\">&#9888;</span><span>Line " + res.ui.loadLine + ": " + esc(res.ui.loadMsg) + "<br>The program was not loaded; the previous program is still loaded.</span>";
+    return false;
+  }
+  box.className = ""; box.innerHTML = "";
+  stopPlay();
+  S.src = src; S.opt = {view:opt.view, branch:opt.branch, memory:opt.memory};
+  S.res = res; S.U = res.ui; S.cur = 0; S.reached = 0; S.revealed = true; S.note = "";
+  var U = S.U, i, k, seen = {}, list = [];
+  function use(r){ if (!seen[r]){ seen[r] = true; list.push(r); } }
+  S.atNote = false;
+  for (i = 0; i < U.prog.lines.length; i++){
+    var e = U.prog.lines[i];
+    if (e.kind === "setup"){ if (e.size === 8){ use(1); S.atNote = true; } use(e.rt); }
+  }
+  for (i = 0; i < U.prog.lines.length; i++){
+    var en = U.prog.lines[i];
+    if (en.kind !== "instr") continue;
+    if (C.ISA[en.op].type === "R"){ use(en.rd); use(en.rs); use(en.rt); }
+    else if (en.op === "beq"){ use(en.rs); use(en.rt); }
+    else { use(en.rt); use(en.rs); }
+  }
+  S.regsUsed = list;
+  S.firstWB = Infinity; S.lastFetch = 0;
+  S.rows = [];
+  for (i = 0; i < U.inst.length; i++){
+    var it = U.inst[i], last = 0;
+    for (k in it.cells){ if (it.cells.hasOwnProperty(k) && +k > last) last = +k; }
+    it.lastC = last;
+    if (it.wbC && it.wbC < S.firstWB) S.firstWB = it.wbC;
+    if (it.ifC > S.lastFetch) S.lastFetch = it.ifC;
+    /* a flushed instruction becomes a bubble that still moves through the later stages: those cells are shown in gray */
+    it.bub = null; it.dispLast = last;
+    if (it.flushedAt){
+      for (var bc = it.flushedAt + 1; bc <= U.last; bc++){
+        for (var bk = 0; bk < 5; bk++){
+          var bsl = U.cycles[bc].slots[bk];
+          if (!bsl.id && bsl.hole === "flush" && bsl.from === it.id){ (it.bub = it.bub || {})[bc] = STAGES[bk]; it.dispLast = bc; }
+        }
+      }
+    }
+    S.rows.push(it);
+  }
+  /* Waiting cycles of IF that are followed by no fetch get a row of their own, so the table looks the same while IF waits,
+     whatever happens next. Always stall: nothing is fetched after the branch (the program ended). One shared memory: the
+     blocked fetch was on the wrong path of a taken branch (flushBy), or the run stopped. */
+  function ownWait(q){ return (q.ifHole === "branchwait" || q.ifHole === "memwait") && !q.waitRow; }
+  k = 1;
+  while (k <= U.last){
+    var rc = U.cycles[k];
+    if (ownWait(rc)){
+      var ph = {phantom:true, id:0, firstC:k, lastC:k, dispLast:k, cells:{}, waitKind:{}, kind:rc.ifHole, by:rc.ifHole === "branchwait" ? rc.slots[0].by : 0, flushBy:0};
+      while (k <= U.last && ownWait(U.cycles[k])){
+        ph.cells[k] = "stall"; ph.waitKind[k] = U.cycles[k].ifHole; ph.lastC = k; ph.dispLast = k; k++;
+        if (k <= U.last && U.cycles[k].flushHere){ ph.flushBy = U.cycles[k].flushHere.beq; break; }
+      }
+      for (i = 0; i < U.inst.length; i++){ if (U.inst[i].firstC < ph.firstC) ph.id = U.inst[i].id; }
+      ph.id = ph.id + 1;
+      S.rows.push(ph);
+    } else k++;
+  }
+  S.rows.sort(function(a, b){ return a.firstC - b.firstC || a.id - b.id; });
+  var keep = {};
+  for (i = 0; i < U.prog.lines.length; i++){ if (U.prog.lines[i].kind === "instr" && S.bps[U.prog.lines[i].line]) keep[U.prog.lines[i].line] = true; }
+  S.bps = keep;
+  return true;
+}
+function presetIndex(){ for (var i = 0; i < PRESETS.length; i++){ if (PRESETS[i].src === S.src) return i; } return -1; }
+/* the switches of the loaded example that differ from the example's own settings (the View switch is a way of looking, not a setting) */
+function changedText(i){
+  var o = PRESETS[i].opt, ch = [];
+  if (o.memory !== S.opt.memory) ch.push("Memory");
+  if (o.branch !== S.opt.branch) ch.push("Branch");
+  return ch.length ? " (" + ch.join(", ") + " changed)" : "";
+}
+/* The list holds the examples. A changed example gets an entry of its own under the plain one, so that picking the plain
+   example loads it again with its own settings. "Your own program" is only a label: it shows when a typed program is loaded. */
+var presetSig = "";
+function syncPreset(){
+  var sel = $("preset"), i = presetIndex(), chg = i >= 0 ? changedText(i) : "", n = PRESETS.length;
+  var sig = i + "|" + chg;
+  if (sig !== presetSig){
+    presetSig = sig;
+    var h = "";
+    for (var j = 0; j < n; j++){
+      h += "<option value=\"" + j + "\">" + esc(PRESETS[j].name) + "</option>";
+      if (j === i && chg) h += "<option value=\"chg\">" + esc(PRESETS[j].name + chg) + "</option>";
+    }
+    if (i < 0) h += "<option value=\"custom\" disabled>Your own program</option>";
+    sel.innerHTML = h;
+  }
+  sel.value = i < 0 ? "custom" : chg ? "chg" : String(i);
+  /* the label (always whole on the screen) also says when a setting of the example was changed; the list entry may be cut */
+  $("exLong").textContent = i < 0 ? "Choose an example (" + n + " in the list):" : "Choose an example (" + (i + 1) + " of " + n + (chg ? " · settings changed" : "") + "):";
+  $("exShort").textContent = i < 0 ? "Examples" : "Example " + (i + 1) + " of " + n + (chg ? " · changed" : "");
+  $("exLong").parentNode.title = chg ? "Changed from the example's own settings:" + chg.replace(/[()]/g, "").replace(" changed", "") + ". Choose the plain example in the list to restore them." : "";
+}
+function setEditing(on, draft){
+  S.editing = on;
+  $("editor").hidden = !on; $("listing").hidden = on;
+  $("btnEdit").hidden = on;
+  if (on){ var cd = $("code"); cd.value = typeof draft === "string" ? draft : S.src; cd.scrollTop = 0; try{ cd.setSelectionRange(0, 0); }catch(e){} }
+  else { $("loadMsg").className = ""; $("loadMsg").innerHTML = ""; }
+  syncPreset();
+}
+
+/* ---------------- stepping ---------------- */
+function stopPlay(){ if (S.timer){ clearTimeout(S.timer); S.timer = null; } }
+function goTo(c){
+  c = Math.max(0, Math.min(S.U.last, c));
+  /* leaving a cycle that is still hidden for an earlier one: that unseen column is taken away again */
+  if (!S.revealed && c < S.reached) S.reached = S.reached - 1;
+  S.cur = c; if (S.cur > S.reached) S.reached = S.cur; S.revealed = true;
+}
+function next(){
+  if (!S.revealed){ S.revealed = true; return "show"; }
+  if (atEnd()) return "";
+  S.cur++;
+  if (S.cur > S.reached){ S.reached = S.cur; S.revealed = !S.hide; }
+  S.pulse = true;      /* a clock edge: the pipeline registers flash once */
+  return "step";
+}
+function speedMs(){ return SPEEDS[parseInt($("speed").value, 10)] || 2000; }
+function tick(){
+  S.timer = null;
+  S.note = "";
+  var what = next();
+  var stop = (atEnd() && S.revealed);
+  if (what === "step"){
+    var f = S.U.cycles[S.cur].fetched;
+    if (f && S.bps[I(f).e.line]){ stop = true; S.note = "Play stopped at the breakpoint: I" + f + " entered IF."; }
+  }
+  if (!stop) S.timer = setTimeout(tick, speedMs());
+  render();
+}
+function play(){
+  if (S.timer || (atEnd() && S.revealed)) return;
+  tick();
+}
+/* a new speed applies at once: the wait for the next cycle starts again with the new length */
+function respeed(){ if (S.timer){ clearTimeout(S.timer); S.timer = setTimeout(tick, speedMs()); } }
+function endNote(it, already){
+  if (it.flushed) return "I" + it.id + " was flushed in CC" + it.flushedAt + (already ? "." : ", so the run stops here.");
+  if (it.wbC) return "I" + it.id + (already ? " already" : "") + " finished WB in CC" + it.wbC + ".";
+  if (it.error) return "I" + it.id + " caused the runtime error in CC" + it.discardedAt + (already ? "." : ", so the run stops there.");
+  if (it.discardedAt) return "I" + it.id + " was discarded when the run stopped with a runtime error in CC" + it.discardedAt + ".";
+  return "I" + it.id + " was still in the pipeline when the run stopped at the 10,000-cycle limit (CC" + S.U.last + ").";
+}
+function runToLine(line){
+  stopPlay();
+  var U = S.U, i, hit = null, earlier = null;
+  for (i = 0; i < U.inst.length; i++){
+    var it = U.inst[i];
+    if (it.e.line !== line) continue;
+    /* a later run that finishes WB wins over a flushed one; a run that never ends (still in the pipeline when the run stopped at
+       the cycle limit, or discarded) is taken only when there is nothing else */
+    if (it.lastC > S.cur){ if (it.wbC){ hit = it; break; } if (!hit || (!hit.flushed && it.flushed)) hit = it; continue; }
+    earlier = it;
+  }
+  S.note = "";
+  if (hit){
+    goTo(hit.lastC);
+    S.note = "Run to here: " + endNote(hit, false);
+  } else if (earlier){
+    goTo(earlier.lastC);
+    S.note = "Run to here: " + endNote(earlier, true) + " No later run of this line exists, so that cycle is shown.";
+  } else {
+    goTo(U.last);
+    S.note = S.res.runtimeError ? "The run stopped before that line ran." : "The program finished before that line ran.";
+  }
+  render();
+}
+
+/* ---------------- text helpers ---------------- */
+/* is there a traced instruction at this address? (a label at the very end of the program has none) */
+function progHasAt(addr){ return S.U.prog.lines.some(function(e){ return e.addr === addr && ["label", "setup", "data", "dlabel", "exit"].indexOf(e.kind) < 0; }); }
+function regVal(r, v){ return rn(r) + " = " + val(v); }
+function join(list){ return list.length <= 1 ? list.join("") : list.slice(0, -1).join(", ") + " and " + list[list.length - 1]; }
+function pathName(p){ return p === "P1" ? "Path 1 (EX/MEM → EX)" : "Path 2 (MEM/WB → EX)"; }
+function aluText(inst){
+  var a = val(inst.a), b = val(inst.b), r = val(inst.alu);
+  switch (inst.e.op){
+    case "add": case "addi": return "ALU: " + a + " + " + b + " = " + r;
+    case "sub": return "ALU: " + a + " − " + b + " = " + r;
+    case "and": return "ALU: " + a + " and " + b + " = " + r;
+    case "or": return "ALU: " + a + " or " + b + " = " + r;
+    case "slt": return "ALU: " + a + " < " + b + " ? " + r;
+    case "lw": case "sw": return "ALU: address " + C.hex32(inst.alu);
+  }
+  return "";
+}
+function forwarded(inst){ return inst.src.filter(function(s){ return s.path === "P1" || s.path === "P2"; }); }
+function fwdList(fw){ return fw.map(function(s){ return regVal(s.reg, s.val) + " from I" + s.from + " (" + (s.path === "P1" ? "EX/MEM" : "MEM/WB") + ")"; }).join("; "); }
+/* registers that this instruction reads in ID in cycle c as a value written in the first half of the same cycle */
+function newReads(inst, c){
+  if (inst.idLast !== c || !inst.rfNew || inst.flushedAt === c || inst.discardedAt === c || wpAt(inst, c)) return [];
+  return Object.keys(inst.rfNew).map(Number).filter(function(r){ return !taintAt(inst.rfNew[r], c); });
+}
+/* ---- Problem view marks (data: inst.pv from the engine) ----
+   A mark is shown only from the cycle in which its cause exists: "should not run" from the EX cycle of the branch that
+   decides it, a wrong result from the cycle that produces it. */
+function wpAt(inst, c){ var p = inst.pv; return !!(p && !p.onPath && p.knownC && c >= p.knownC); }
+function prodC(inst){ var p = inst.pv; return (p && p.wrong) ? (p.at === "MEM" ? inst.memC : inst.exC) : 0; }
+function reasonShort(inst){
+  var r = inst.pv.reason;
+  if (r && r.kind === "stale") return "old " + rn(r.reg);
+  if (r && r.kind === "taint") return "wrong value from I" + r.from;
+  return "wrong input";
+}
+/* "" when instance id is fine as far as cycle c shows; otherwise why a value written by it cannot be trusted */
+function taintAt(id, c){
+  var inst = id ? I(id) : null, p = inst ? inst.pv : null;
+  if (!p) return "";
+  if (!p.onPath) return wpAt(inst, c) ? "should not run" : "";
+  if (p.wrong && inst.e.op !== "beq" && prodC(inst) && c >= prodC(inst)) return "wrong value";
+  return "";
+}
+function taintTag(id, c){
+  var t = taintAt(id, c);
+  return !t ? "" : t === "wrong value" ? "✗ wrong value (written by I" + id + ")" : "✗ written by I" + id + ", which should not run";
+}
+/* why a stage holds a bubble (no-operation) */
+function holeReason(slot){
+  if (slot.hole === "loaduse") return "load-use stall in CC" + slot.born;
+  if (slot.hole === "flush") return slot.from ? "I" + slot.from + " was flushed" : "empty fetch slot after the taken branch I" + slot.by;
+  if (slot.hole === "branchwait") return "no fetch in CC" + slot.born + " (branch)";
+  if (slot.hole === "memwait") return slot.re ? "I" + slot.re + " was fetched again in CC" + slot.born + " (memory busy in CC" + (slot.born - 1) + ")" : "no fetch in CC" + slot.born + " (memory busy)";
+  if (slot.hole === "discard") return "discarded after the error";
+  return "";
+}
+
+/* status of one stage box: {cls, ins, st} */
+function stageInfo(k, c){
+  var U = S.U, out = {cls:"", ins:"(empty)", none:true, st:""};
+  if (c === 0) return out;
+  var rec = U.cycles[c], slot = rec.slots[k];
+  if (!slot.id){
+    if (slot.hole === "empty") return out;
+    if (k === 0 && slot.hole === "branchwait"){ out.cls = "stall"; out.ins = "(no fetch)"; out.st = "STALL: waits for the branch I" + slot.by; return out; }
+    if (k === 0 && slot.hole === "memwait"){ out.cls = sol() ? "stall" : "wrong"; out.ins = "(no fetch)"; out.st = (sol() ? "" : "✗ ") + "STALL: memory busy (I" + (rec.slots[3].id || slot.by) + " in MEM)"; return out; }
+    if (k === 0 && slot.hole === "discard"){ out.cls = "bubble"; out.ins = "(no fetch)"; out.st = "stopped: runtime error"; return out; }
+    out.cls = "bubble"; out.ins = slot.hole === "flush" && slot.from ? "(bubble, was I" + slot.from + ")" : "(bubble)";
+    out.st = "BUBBLE (no-operation): " + holeReason(slot); return out;
+  }
+  var inst = I(slot.id), e = inst.e;
+  out.ins = nm(inst) + ": " + inst.text; out.none = false;
+  if (rec.error && rec.error.id === inst.id){ out.cls = "err"; out.st = "ERROR: " + rec.error.msg; return out; }
+  if (inst.discardedAt === c){ out.cls = "flushed"; out.st = "DISCARDED: the run stops (runtime error)"; return out; }
+  if (inst.flushedAt === c){ out.cls = "flushed"; out.st = "FLUSHED at the end of CC" + c + ": wrong path"; return out; }
+  if (wpAt(inst, c)){ out.cls = "wrong"; out.st = "✗ should not run (wrong path)"; return out; }
+  var p = inst.pv || null;
+  if (k === 0){
+    if (inst.heldAt[c]){ out.cls = "stall"; out.st = "STALL: held in IF" + (inst.collide && inst.collide.c === c ? "; memory busy (I" + inst.collide.by + " in MEM)" : ""); }
+    else out.st = inst.refetchC === c ? "fetched again (memory was busy in CC" + (c - 1) + ")" : "fetched";
+  }
+  else if (k === 1){
+    if (inst.heldAt[c]){ out.cls = "stall"; out.st = "STALL: waits for " + rn(inst.stalledFor.reg); }
+    else {
+      var srcs = C.sourcesOf(e).map(rn), nw = newReads(inst, c);
+      out.st = srcs.length ? "reads " + join(srcs) : "reads registers";
+      if (nw.length) out.st += " (" + join(nw.map(rn)) + ": new value)";
+    }
+  } else if (k === 2){
+    var fw = forwarded(inst);
+    if (e.op === "beq"){
+      var z = val(inst.a) + " − " + val(inst.rtUsed) + (inst.taken ? " = 0" : " ≠ 0") + ": ";
+      if (p && p.wrong){ out.cls = "wrong"; out.st = "★ ✗ " + z + (inst.taken ? "taken" : "not taken") + " (" + reasonShort(inst) + "); correct: " + (p.corr.taken ? "taken" : "not taken"); }
+      else if (p && p.ignored){ out.cls = "wrong"; out.st = "★ taken, but ignored ✗"; }
+      else { out.cls = "br"; out.st = "★ " + z + (inst.taken ? "taken" : "not taken") + (fw.length ? ". FORWARDED: " + fwdList(fw) : ""); }
+    } else if (fw.length){
+      out.cls = "fwd";
+      out.st = "FORWARDED: " + fwdList(fw);
+    } else if (p && p.wrong && p.at === "EX"){
+      out.cls = "wrong"; out.st = "✗ " + (p.reason.kind === "stale" ? "used old " + regVal(p.reason.reg, p.reason.oldVal) : reasonShort(inst)) + (e.op === "sw" || e.op === "lw" ? "" : ": result " + val(inst.alu) + ", correct " + val(p.corr.res));
+    } else out.st = aluText(inst) + (p && p.neutral ? " (old " + rn(p.neutral.reg) + ", same result)" : "");
+  } else if (k === 3){
+    var late = p && p.wrong && prodC(inst) && c > prodC(inst);
+    if (e.op === "lw"){
+      if (p && p.wrong && p.at === "MEM"){ out.cls = "wrong"; out.st = "✗ loads " + regVal(e.rt, inst.loaded) + " (" + reasonShort(inst) + "); correct " + val(p.corr.res); }
+      else out.st = e.rt === 0 ? "reads " + val(inst.loaded) + "; destination $zero, ignored" : "loads " + regVal(e.rt, inst.loaded);
+    }
+    else if (e.op === "sw"){ out.st = (late ? "✗ " : "") + "stores " + val(inst.storeVal) + " at " + C.hex32(inst.memAddr) + (late ? " (wrong)" : ""); if (late) out.cls = "wrong"; }
+    else out.st = "no memory access";
+  } else {
+    var lateW = p && p.wrong && e.op !== "beq" && prodC(inst) && c > prodC(inst);
+    if (inst.dest !== 0){ out.st = (lateW ? "✗ " : "") + "writes " + regVal(inst.dest, inst.writeVal) + (lateW ? " (wrong value)" : ""); if (lateW) out.cls = "wrong"; }
+    else if (C.ISA[e.op].ctl.RegWrite === 1) out.st = "writes $zero: ignored, $zero is always 0";
+    else out.st = "no register write";
+  }
+  return out;
+}
+
+/* ---------------- Now line ---------------- */
+function phaseText(c){
+  var slots = S.U.cycles[c].slots, busy = 0, k;
+  for (k = 0; k < 5; k++){ if (slots[k].id) busy++; }
+  /* one rule, used in every cycle that has no other event */
+  var ended = c > S.lastFetch && !slots[0].id && (slots[0].hole === "empty" || slots[0].hole === "discard");
+  if (busy === 5) return "Steady state: all five stages busy.";
+  if (ended) return "Drain: nothing is left to fetch; the instructions in the pipeline finish.";
+  if (c < S.firstWB) return "Fill: the pipeline is filling.";
+  return busy + " of the five stages hold an instruction.";
+}
+function nowHTML(c){
+  var U = S.U, res = S.res, parts = [];
+  if (c === 0){
+    if (!U.inst.length) return "<b>Ready.</b> This program has no traced instruction, so nothing enters the pipeline. Press <b>Edit</b> to type a program.";
+    var hasLi = U.prog.lines.some(function(q){ return q.kind === "setup"; }), hasData = U.prog.data.length > 0;
+    var pre = hasLi && hasData ? " (the gray setup lines have already run: the <code>.word</code> values are in memory and the <code>li</code> values are in the registers)"
+      : hasLi ? " (the gray setup <code>li</code> lines have already run)" : hasData ? " (the gray <code>.word</code> values are already in memory)" : "";
+    return "<b>Ready" + pre + ".</b> Press <b>Next cycle</b> (or Space) to start CC1. " +
+      "Choose another example above, or press <b>Edit</b> to type your own program. To predict each cycle before you see it, press <b>Hide outputs</b>. Reloading the page returns to example 1 and the default switches; a typed program is lost.";
+  }
+  var rec = U.cycles[c], prev = c > 1 ? U.cycles[c - 1] : null, slots = rec.slots;
+  var k, x = slots[2].id ? I(slots[2].id) : null, fetchSaid = false;
+  /* one sentence group per event; the first one carries the cycle number */
+  function add(title, text){ parts.push((parts.length ? "<b>Also: " + title + "</b> " : "<b>CC" + c + ": " + title + "</b> ") + text); }
+  /* runtime errors */
+  if (rec.error){
+    var er = rec.error, ei = er.id ? I(er.id) : null, t;
+    if (er.where === "guard") return "<b>CC" + c + ":</b> <b>" + esc(er.msg) + "</b>";
+    if (er.where === "EX") t = nmop(ei) + " in EX: " + val(ei.a) + (ei.e.op === "sub" ? " − " : " + ") + val(ei.b) + " does not fit in a 32-bit signed number (overflow). <b>Runtime error: " + er.msg + ".</b> I" + ei.id + " writes nothing.";
+    else {
+      var ma = ei.memAddr, why0 = ma % 4 !== 0 ? "is not a multiple of 4"
+        : (ma >= 0x00400000 && ma < 0x00800000) ? "is in the text segment (where the program itself is), which <code>lw</code> and <code>sw</code> may not use"
+        : (ma >= 0x80000000 && ma < 0x80400000) ? "is in the kernel text segment, which <code>lw</code> and <code>sw</code> may not use"
+        : "is outside the memory a program may use (the same rule as in MARS; data starts at 0x10000000)";
+      t = nmop(ei) + " in MEM: the address " + C.hex32(ma) + " " + why0 + ". <b>Runtime error: " + esc(er.msg) + ".</b> I" + ei.id + " reads and writes nothing.";
+    }
+    var young = U.inst.filter(function(q){ return q.discardedAt === c && q.id !== ei.id; }).map(nm);
+    if (young.length) t += " The younger " + join(young) + (young.length > 1 ? " are" : " is") + " discarded, and nothing more is fetched.";
+    else t += " Nothing more is fetched.";
+    if (rec.regWrite) t += " The older " + nmop(I(rec.regWrite.id)) + " still completes: it writes " + regVal(rec.regWrite.reg, rec.regWrite.val) + " in WB.";
+    if (U.last > c){ var od = I(U.cycles[c + 1].slots[4].id); t += " The older " + nmop(od) + " is already past EX, so it still finishes WB in CC" + (c + 1) + "; then the run stops."; }
+    else t += " The run stops here.";
+    return "<b>CC" + c + ":</b> " + t;
+  }
+  if (rec.stop){
+    var fi = I(rec.stop.id), w4 = slots[4].id ? I(slots[4].id) : null, s0 = "<b>CC" + c + ":</b> ";
+    if (w4) s0 += nmop(w4) + " is older than the faulting I" + fi.id + ", so it completes: " + (rec.regWrite ? "it writes " + regVal(rec.regWrite.reg, rec.regWrite.val) + " in WB. " : "it finishes WB (no register write). ");
+    return s0 + "<b>The run stopped: runtime error in CC" + rec.stop.c + ", " + esc(rec.stop.msg) + " in " + nmop(fi) + ".</b> Every instruction before I" + fi.id + " completed; I" + fi.id + " and the instructions after it changed nothing.";
+  }
+  /* what happened at the clock edge that started this cycle */
+  if (rec.flushHere){
+    var bq = I(rec.flushHere.beq), fl = rec.flushHere.ids.slice().sort(function(a, b){ return a - b; }).map(function(id){ return "I" + id; });
+    var s = "<b>End of CC" + (c - 1) + ": branch taken.</b> In EX, " + nmop(bq) + " compared " + regVal(bq.e.rs, bq.a) + " and " + regVal(bq.e.rt, bq.rtUsed) + ", so Zero = 1. ";
+    /* the 2 fetch slots after the taken branch: flushed instructions, slots with nothing left to fetch, slots the shared memory had blocked */
+    var fe = rec.flushHere.empties, fw2 = rec.flushHere.waits;
+    if (fl.length) s += join(fl) + (fl.length > 1 ? " were" : " was") + " fetched on the wrong path and " + (fl.length > 1 ? "are" : "is") + " flushed: " + (fl.length > 1 ? "they become bubbles (no-operations). " : "it becomes a bubble (no-operation). ");
+    if (fe === 2) s += "No instruction was fetched after the branch (nothing was left to fetch), so the 2 fetch slots after the taken branch are empty; they move on as 2 bubbles (no-operations). ";
+    else if (fe === 1) s += "The other of the 2 fetch slots after the taken branch is empty (nothing was left to fetch); it moves on as a bubble too. ";
+    if (fw2 === 2) s += "No instruction was fetched after the branch: the shared memory blocked both fetches. The 2 fetch slots after the taken branch are empty and move on as 2 bubbles (no-operations). ";
+    else if (fw2 === 1){
+      var ps = U.cycles[c - 1].slots, ownF = fl.length === 1 && !ps[1].id && ps[1].hole === "memwait";
+      s += "The other of the 2 fetch slots after the taken branch was already empty: " + (ownF ? "the shared memory had " + (ps[1].re ? "made " + fl[0] + " repeat its own fetch" : "delayed the fetch of " + fl[0] + " itself") + ". " : "the shared memory blocked that fetch, on the wrong path. ") + "It moves on as a bubble too. ";
+    }
+    s += "<b>CC" + c + ":</b> ";
+    fetchSaid = true;
+    var pen = fw2 ? "The taken branch costs 2 cycles; " + fw2 + " of them " + (fw2 === 1 ? "is" : "are") + " already counted as lost to the shared memory." : "Branch penalty: 2 cycles.";
+    if (rec.fetched) s += "the target <code>" + esc(bq.e.label) + "</code> is fetched (I" + rec.fetched + "). " + pen;
+    else if (slots[0].hole === "memwait") s += "the target <code>" + esc(bq.e.label) + "</code> cannot be fetched yet: " + nmop(I(slots[0].by)) + " uses the one shared memory in MEM (structural hazard, stall). " + pen;
+    else s += "the target <code>" + esc(bq.e.label) + "</code> is the end of the program, so nothing is fetched and no cycle is lost.";
+    parts.push(s);
+  } else if (sol() && U.branch === "stall" && prev && prev.resolve){
+    var b2 = I(prev.resolve.id);
+    var s2 = "<b>End of CC" + (c - 1) + ": branch outcome known.</b> " + nmop(b2) + " compared " + regVal(b2.e.rs, b2.a) + " and " + regVal(b2.e.rt, b2.rtUsed) + ": Zero = " + b2.zero + ", " + (b2.taken ? "taken" : "not taken") + ". <b>CC" + c + ":</b> ";
+    fetchSaid = true;
+    if (rec.fetched){
+      var wk = I(rec.fetched).waitKind, waited = 0, lu = 0;
+      for (k in wk){ if (wk.hasOwnProperty(k) && wk[k] === "branchwait"){ waited++; if (U.cycles[+k].stall) lu++; } }
+      s2 += "fetching restarts " + (b2.taken ? "at the target <code>" + esc(b2.e.label) + "</code>" : "at PC + 4") + " (I" + rec.fetched + "). ";
+      if (lu) s2 += "The fetch waited " + waited + " cycles: " + lu + " for the load-use stall and " + (waited - lu) + " lost to the branch.";
+      else s2 += "Always stall lost " + waited + " cycle" + (waited === 1 ? "" : "s") + " for this branch.";
+    } else if (slots[0].hole === "memwait") s2 += "the shared memory is busy, so the fetch waits one more cycle.";
+    else s2 += "nothing is left to fetch, so the waiting row stays without an instruction. These waiting cycles cost nothing: the program ended.";
+    parts.push(s2);
+  }
+  /* what happens during this cycle */
+  if (rec.stall){
+    var d = I(rec.stall.id), lw = I(rec.stall.lw);
+    var s3 = nmop(d) + " needs " + rn(rec.stall.reg) + ", but " + nmop(lw) + " reads it from " + (U.memory === "shared" ? "Memory (shared)" : "the Data Memory") + " only in this cycle (MEM). I" + d.id + " is held in ID";
+    if (rec.stall.ifId) s3 += " and I" + rec.stall.ifId + " is held in IF";
+    s3 += ", so a bubble (no-operation) enters EX.";
+    if (!S.hide) s3 += " In CC" + (c + 1) + ", " + pathName("P2") + " forwards " + regVal(rec.stall.reg, lw.loaded) + " to I" + d.id + ".";      /* not said in Hide outputs mode: it would give the next cycle away */
+    if (!slots[0].id && slots[0].hole === "memwait") s3 += " IF still fetches nothing: " + nmop(lw) + " uses the one shared memory in MEM in this cycle.";
+    add("load-use hazard, one stall.", s3);
+    if (rec.stall.collide){
+      add("structural hazard.", "IF reads I" + rec.stall.ifId + " from the one shared memory again in this cycle (the stall only keeps the PC and IF/ID from changing), but I" + lw.id + " (<code>lw</code>) is using that memory in MEM." +
+        (S.hide ? "" : " So I" + rec.stall.ifId + " must be fetched again in CC" + (c + 1) + ": one more lost cycle. With two separate memories this cannot happen."));
+    }
+  }
+  if (rec.refetch){
+    var rfI = I(rec.refetch.id);
+    add("fetched again (structural hazard).", nmop(rfI) + " is fetched again: its fetch in CC" + (c - 1) + " collided with I" + rec.refetch.by + " (<code>lw</code>), which used the one shared memory in MEM. A bubble (no-operation) moves on in its place: one cycle lost to the shared memory.");
+    fetchSaid = true;
+  }
+  var fw = (sol() && x) ? forwarded(x) : [];
+  if (fw.length && x.e.op !== "beq"){
+    if (fw.length === 1){
+      var f = fw[0], p = I(f.from), isLoad = p.e.op === "lw";
+      var dst = (x.e.op === "sw" && f.reg === x.e.rt && f.reg !== x.e.rs) ? "sends it to EX, where it becomes the value to write to memory." : "sends it to the ALU.";
+      var s4 = nmop(x) + " needs " + rn(f.reg) + " now, but " + nmop(p);
+      if (f.path === "P1") s4 += " writes it to the Register File only in CC" + (c + 1) + ". The result " + val(f.val) + " is already in the EX/MEM register, so " + pathName("P1") + " " + dst + " No stall.";
+      else s4 += " writes it to the Register File only in this cycle, too late for the read in ID. The " + (isLoad ? "loaded word " : "result ") + val(f.val) + " is in the MEM/WB register, so " + pathName("P2") + " " + dst + (isLoad ? "" : " No stall.");
+      add(isLoad ? "the loaded word is forwarded." : "RAW hazard solved by forwarding (bypassing).", s4);
+    } else {
+      add("RAW hazards solved by forwarding (bypassing).", nmop(x) + " needs " + join(fw.map(function(q){ return rn(q.reg); })) + " now: " +
+        fw.map(function(q){ return pathName(q.path) + " gives " + regVal(q.reg, q.val) + " from I" + q.from; }).join("; ") + ". No stall.");
+    }
+  }
+  var xp = x ? (x.pv || null) : null;
+  /* Problem view: what an ignored taken branch does to the instructions after it */
+  function afterIgnored(b){
+    var wrongOnes = U.inst.filter(function(q){ return q.pv && !q.pv.onPath && q.pv.cause === b.id; });
+    if (wrongOnes.length) return "The instructions fetched after it keep running although they should not run.";
+    if (b.e.target === C.toU32(b.pc + 4)) return (progHasAt(b.e.target) ? "Its target is the next instruction" : "Its target is the end of the program") + ", so ignoring the branch is harmless here.";
+    return "Nothing was left to fetch after it, so no instruction runs by mistake; but the instructions from <code>" + esc(b.e.label) + "</code> on, which should run next, never run.";
+  }
+  function whyWrong(inst){
+    var r = inst.pv.reason;
+    if (r.kind === "stale") return "used the old " + regVal(r.reg, r.oldVal) + ", read in ID in CC" + inst.idLast + " (" + nmop(I(r.from)) + " has not written the new value yet)";
+    if (r.kind === "taint") return "uses a wrong value from I" + r.from + " (" + (I(r.from).pv.onPath ? "its result is wrong" : "it should not run") + ")";
+    return "has a wrong input";
+  }
+  if (x && x.e.op === "beq"){
+    var cmp = nmop(x) + " is in EX: " + (fw.length ? fw.map(function(q){ return pathName(q.path) + " forwards " + regVal(q.reg, q.val) + " from I" + q.from; }).join("; ") + ". The" : "the") +
+      " ALU subtracts " + regVal(x.e.rt, x.rtUsed) + " from " + regVal(x.e.rs, x.a) + ", so Zero = " + x.zero + ": ";
+    var ttl = fw.length ? "the branch resolves, with a forwarded value." : "the branch resolves.";
+    if (!sol()){
+      if (!xp.onPath) add("✗ wrong path.", nmop(x) + " is on the wrong path (it should not run), so its outcome does not matter.");
+      else if (xp.wrong) add("✗ wrong branch outcome.", nmop(x) + " " + whyWrong(x) + ". The ALU subtracts " + regVal(x.e.rt, x.rtUsed) + " from " + regVal(x.e.rs, x.a) + ", so Zero = " + x.zero + ": " + (x.taken ? "taken" : "not taken") +
+        ". The correct outcome is " + (xp.corr.taken ? "taken, but this pipeline ignores every outcome. " + afterIgnored(x) : "not taken. This pipeline ignores every outcome and keeps fetching in order, which happens to be right here."));
+      else if (xp.ignored) add(x.e.target === C.toU32(x.pc + 4) ? "✗ control hazard (harmless here)." : "✗ control hazard.", cmp + "the branch is taken, but this pipeline ignores the outcome. " + afterIgnored(x));
+      else add("the branch is not taken.", cmp + "not taken. Fetching in order was right this time." + (xp.neutral ? " (It used the old " + rn(xp.neutral.reg) + ", but the outcome is the same.)" : ""));
+    } else if (U.branch === "pnt"){
+      var later = [slots[1].id, slots[0].id].filter(function(q){ return q; });
+      var blocked = [slots[1], slots[0]].filter(function(q){ return !q.id && q.hole === "memwait"; }).length;
+      /* one empty slot ahead of the one fetched instruction (slot in ID, instruction in IF): that instruction's own fetch was delayed
+         or repeated by the shared memory; an empty slot after it (slot in IF): the fetch of the instruction after it was blocked */
+      var own = blocked === 1 && later.length === 1 && !slots[1].id;
+      var rest = own ? " The other fetch slot after the branch is empty: the shared memory " + (slots[1].re ? "made I" + later[0] + " repeat its own fetch." : "delayed the fetch of I" + later[0] + " itself.")
+        : blocked ? " The shared memory blocked the fetch of " + (blocked === 2 ? "both instructions after it." : later.length ? "the instruction after I" + later[0] + "." : "the next instruction.") : later.length < 2 ? " Nothing else was left to fetch." : "";
+      if (x.taken) add(ttl, cmp + "taken. This is known at the end of CC" + c + "; " + (later.length === 2 ? "the 2 instructions after it (I" + later[0] + " and I" + later[1] + ") were fetched on the wrong path (control hazard)."
+        : later.length === 1 ? "the instruction after it (I" + later[0] + ") was fetched on the wrong path (control hazard)." + rest : "no instruction was fetched after it." + rest));
+      else add(ttl, cmp + "not taken. Predict-not-taken was right: the next instructions continue, branch penalty 0.");
+    } else {
+      add(ttl, cmp + (x.taken ? "taken" : "not taken") + "." + (S.hide ? "" : " IF can fetch again in CC" + (c + 1) + "."));
+    }
+  }
+  if (xp && xp.onPath && x.e.op !== "beq"){
+    if (xp.wrong && xp.at === "EX"){
+      var tail = (x.e.op === "sw") ? " The stored value or the address is wrong." : (x.e.op === "lw") ? " The address is wrong." : " It computes " + val(x.alu) + "; the correct result is " + val(xp.corr.res) + ".";
+      add(xp.reason.kind === "stale" ? "✗ wrong result (RAW hazard)." : "✗ wrong result.", nmop(x) + " " + whyWrong(x) + "." + tail + (xp.reason.kind === "stale" ? " This pipeline has no forwarding and no stall." : ""));
+    } else if (xp.neutral){
+      add("RAW hazard, same result.", nmop(x) + " used the old " + regVal(xp.neutral.reg, xp.neutral.oldVal) + " (the new value is not written yet), but its result is the same here.");
+    }
+  }
+  if (xp && !xp.onPath && x.e.op !== "beq" && x.staleInfo){
+    /* an instruction that should not run and that also read a register too early: say which old value it used */
+    var so = x.staleInfo.filter(function(q){ return I(q.from).pv.onPath; })[0];
+    if (so) add("✗ wrong path.", nmop(x) + " should not run. It also used the old " + regVal(so.reg, so.oldVal) + ", read in ID in CC" + x.idLast + " (" + nmop(I(so.from)) + " has not written the new value yet).");
+  }
+  var mI = slots[3].id ? I(slots[3].id) : null;
+  if (mI && mI.pv && mI.pv.onPath && mI.pv.wrong && mI.pv.at === "MEM"){
+    add("✗ wrong result.", nmop(mI) + " loads " + val(mI.loaded) + " from " + C.hex32(mI.memAddr) + ": it " + whyWrong(mI) + ". The correct word is " + val(mI.pv.corr.res) + ".");
+  }
+  if (!slots[0].id && slots[0].hole === "branchwait" && !rec.stall && !(x && x.e.op === "beq")){
+    add("always stall.", "IF fetches nothing until the outcome of I" + slots[0].by + " (<code>beq</code>) is known at the end of its EX stage.");
+  }
+  if (!slots[0].id && slots[0].hole === "memwait" && !rec.stall){
+    var mi = I(slots[0].by);
+    /* a blocked fetch that the taken branch in EX makes pointless (wrong path) does not "wait": it is given up */
+    var given = !rec.waitRow && x && x.e.op === "beq" && x.taken && c < U.last && U.cycles[c + 1].flushHere;
+    add((sol() ? "" : "✗ ") + "structural hazard.", nmop(mi) + " uses the one shared memory in MEM, so IF cannot fetch in this cycle. " + (given ? "The blocked fetch was on the wrong path of the taken branch, so it is given up. " : "The fetch waits until the memory is free (stall). ") + "With separate Instruction and Data Memories this conflict cannot happen.");
+  }
+  var idI = slots[1].id ? I(slots[1].id) : null, news = idI ? newReads(idI, c) : [];
+  if (news.length){
+    var r0 = news[0], w = I(idI.rfNew[r0]);
+    /* the sentence names the register: the same instruction may still need forwarding for its other source */
+    var moreFw = sol() && forwarded(idI).some(function(q){ return q.reg !== r0; });
+    add("no hazard on " + rn(r0) + " for I" + idI.id + ".", (parts.length ? "It" : nmop(idI)) + " reads " + rn(r0) + " in ID in the second half of this cycle, after I" + w.id + " wrote the new value " + val(w.writeVal) + " in the first half." + (parts.length || moreFw ? "" : " No forwarding is needed."));
+  }
+  if (!sol() && !parts.length){
+    var fresh = rec.fetched ? I(rec.fetched) : null;
+    if (fresh && wpAt(fresh, c)){ add("✗ wrong path.", nmop(fresh) + " is fetched on the wrong path: it should not run."); fetchSaid = true; }
+  }
+  if (!parts.length){
+    var g = [];
+    if (rec.fetched) g.push(nmop(I(rec.fetched)) + " is fetched.");
+    if (rec.memRead) g.push(nmop(I(rec.memRead.id)) + " reads the word at " + C.hex32(rec.memRead.addr) + " in MEM: " + val(rec.memRead.val) + (I(rec.memRead.id).e.rt === 0 ? " (destination $zero: the word is ignored)." : "."));
+    if (rec.memWrite) g.push(nmop(I(rec.memWrite.id)) + " stores " + val(rec.memWrite.val) + " at " + C.hex32(rec.memWrite.addr) + " in MEM.");
+    if (rec.regWrite){ var tk = taintAt(rec.regWrite.id, c); g.push(nmop(I(rec.regWrite.id)) + " writes " + regVal(rec.regWrite.reg, rec.regWrite.val) + " in WB" + (tk === "wrong value" ? " ✗ (wrong value)." : tk ? " ✗ (it should not run)." : ".")); }
+    else if (slots[4].id) g.push(nmop(I(slots[4].id)) + (C.ISA[I(slots[4].id).e.op].ctl.RegWrite === 1 ? " writes $zero in WB: ignored, $zero is always 0." : " finishes in WB (no register write)."));
+    var ph = phaseText(c);
+    parts.push("<b>CC" + c + ":</b> " + g.slice(0, 3).concat(ph ? [ph] : []).join(" "));
+    fetchSaid = true;
+  }
+  if (rec.fetched && !fetchSaid) parts.push(nmop(I(rec.fetched)) + " is fetched.");
+  /* a lost cycle becomes visible when its bubble reaches WB */
+  var wb = slots[4];
+  if (!wb.id && wb.hole !== "empty" && wb.hole !== "discard"){
+    var why = wb.hole === "loaduse" ? "the bubble from the load-use stall in CC" + wb.born
+      : wb.hole === "flush" ? (wb.from ? "a bubble from the flush at the end of CC" + (wb.born - 1) + " (taken branch I" + wb.by + ")" : "an empty fetch slot after the taken branch I" + wb.by + " (end of CC" + (wb.born - 1) + ")")
+      : wb.hole === "branchwait" ? "the fetch that waited for the branch I" + wb.by + " in CC" + wb.born
+      : wb.re ? "the repeated fetch of I" + wb.re + " in CC" + wb.born + " (shared memory)"
+      : wb.flushedBy ? "the fetch that the shared memory blocked in CC" + wb.born
+      : "the fetch that waited for the shared memory in CC" + wb.born;
+    parts.push("<b>WB holds a bubble (no-operation):</b> no instruction completes in this cycle. This lost cycle is " + why + ".");
+  }
+  if (c === U.last && !res.runtimeError){
+    parts.push("<b>Run finished:</b> " + res.n + " instruction" + (res.n === 1 ? "" : "s") + " completed in " + res.total + " clock cycles.");
+  }
+  return parts.join(" ").replace(/ {2,}/g, " ");
+}
+
+/* ---------------- rendering ---------------- */
+function renderTop(){
+  function seg(id, v){ var bs = $(id).querySelectorAll("button"); for (var i = 0; i < bs.length; i++) bs[i].setAttribute("aria-pressed", bs[i].getAttribute("data-v") === v ? "true" : "false"); }
+  seg("segView", S.opt.view); seg("segBranch", S.opt.branch); seg("segMem", S.opt.memory);
+  var prob = S.opt.view === "problem", lines = S.U.prog.lines;
+  var hasBeq = lines.some(function(q){ return q.kind === "instr" && q.op === "beq"; });
+  var hasMem = lines.some(function(q){ return q.kind === "instr" && (q.op === "lw" || q.op === "sw"); });
+  offSeg("segBranch", prob ? "The Problem view ignores every branch outcome, so the Branch switch has no effect here." : !hasBeq ? "This program has no beq, so the Branch switch has no effect." : "");
+  offSeg("segMem", !hasMem ? "This program has no lw or sw, so the Memory switch has no effect: only IF uses the memory." : "");
+  $("banner").hidden = !prob;
+  $("btnHide").setAttribute("aria-pressed", S.hide ? "true" : "false");
+  $("hideTxt").textContent = S.hide ? "Outputs hidden" : "Hide outputs";
+  syncPreset();
+}
+/* a switch that has no effect on the loaded program is grayed out; hovering it tells why */
+function offSeg(id, why){
+  var g = $(id), bs = g.querySelectorAll("button");
+  if (!g.hasAttribute("data-title")) g.setAttribute("data-title", g.title);
+  g.classList.toggle("off", !!why);
+  g.title = why || g.getAttribute("data-title");
+  for (var i = 0; i < bs.length; i++){
+    if (!bs[i].hasAttribute("data-title")) bs[i].setAttribute("data-title", bs[i].title);
+    bs[i].title = why || bs[i].getAttribute("data-title");
+    if (why) bs[i].setAttribute("aria-disabled", "true"); else bs[i].removeAttribute("aria-disabled");
+  }
+}
+function renderProgram(){
+  var U = S.U, lines = U.prog.lines, h = "", i, live = {};
+  /* lines with an instruction in the pipeline now are highlighted */
+  if (S.cur > 0 && !curHidden()){
+    var slots = U.cycles[S.cur].slots;
+    for (i = 0; i < 5; i++){ if (slots[i].id) live[I(slots[i].id).e.line] = true; }
+  }
+  for (i = 0; i < lines.length; i++){
+    var e = lines[i], full = C.hex32(e.addr), addr = "<span class=\"addr\" title=\"Address " + full + "\">" + full.slice(6).toUpperCase() + "</span>";
+    if (e.kind === "label") h += "<div class=\"ln label\"><span class=\"nobp\"></span>" + addr + "<span class=\"tx\">" + esc(e.text) + "</span></div>";
+    else if (e.kind === "setup") h += "<div class=\"ln setup\"><span class=\"nobp\"></span><span class=\"addr\">setup</span><span class=\"tx\">" + esc(e.text) + "</span></div>";
+    else if (e.kind === "data") h += "<div class=\"ln setup data\" title=\"Data section: in memory before CC1, starting at " + full + "\"><span class=\"nobp\"></span><span class=\"addr\">data</span><span class=\"tx\">" + esc(e.text) + "</span></div>";
+    else if (e.kind === "dlabel") h += "<div class=\"ln label\" title=\"A name for the data address " + full + "\"><span class=\"nobp\"></span><span class=\"addr\">data</span><span class=\"tx\">" + esc(e.text) + "</span></div>";
+    else if (e.kind === "exit") h += "<div class=\"ln exit\"><span class=\"nobp\"></span>" + addr + "<span class=\"tx\">syscall (end of the program)</span></div>";
+    else {
+      h += "<div class=\"ln tr" + (live[e.line] ? " live" : "") + "\" data-line=\"" + e.line + "\" tabindex=\"0\" role=\"button\" aria-label=\"Run to here: " + esc(e.text) + "\" title=\"Run to here: run until this instruction finishes WB (click, or Enter)\">" +
+        "<button type=\"button\" class=\"bp\" data-bp=\"" + e.line + "\" aria-pressed=\"" + (S.bps[e.line] ? "true" : "false") + "\" aria-label=\"Breakpoint on " + esc(e.text) + "\" title=\"Breakpoint: Play stops when this instruction enters IF\"></button>" +
+        "" + addr + "<span class=\"tx\">" + esc(e.text) + "</span></div>";
+    }
+  }
+  if (!lines.length) h = "<div class=\"ln label\"><span class=\"tx\">(empty program)</span></div>";
+  $("prog").innerHTML = h;
+}
+function renderStrip(){
+  var c = S.cur, h = "", k;
+  $("stripTitle").textContent = c === 0 ? "Pipeline: before CC1" : "Pipeline in CC" + c;
+  for (k = 0; k < 5; k++){
+    var info = curHidden() ? {cls:"q", ins:"?", none:false, st:""} : stageInfo(k, c);
+    h += "<div class=\"stg " + info.cls + "\" data-stage=\"" + STAGES[k] + "\"><div class=\"nm\">" + STAGES[k] + "</div><div class=\"hw\">" + (S.U.memory === "shared" && (k === 0 || k === 3) ? SHARED_NAME : HARDWARE[k]) + "</div>" +
+      "<div class=\"ins" + (info.none || info.ins.charAt(0) === "(" ? " none" : "") + "\">" + esc(info.ins) + "</div>" +
+      "<div class=\"st\">" + (info.st ? "<span>" + esc(info.st) + "</span>" : "") + "</div></div>";
+    if (k < 4){
+      var pc = "preg" + (S.pulse ? " pulse" : "");
+      /* in Focus the register tab is not on the screen, so the registers are plain labels there */
+      if (isFocus()) h += "<div class=\"" + pc + " static\" data-r=\"" + PREGS[k] + "\">" + PREGS[k] + "</div>";
+      else h += "<button type=\"button\" class=\"" + pc + "\" data-reg=\"" + PREGS[k] + "\" aria-pressed=\"" + (S.sel === PREGS[k] && S.tab === "register" ? "true" : "false") + "\" title=\"Show the contents of the " + PREGS[k] + " pipeline register in the Pipeline register tab\">" + PREGS[k] + " <span class=\"i\" aria-hidden=\"true\">&#9432;</span></button>";
+    }
+  }
+  $("strip").innerHTML = wx(h);
+}
+
+/* one timing-table cell: {cls, html} */
+function cellInfo(inst, cc, v){
+  var U = S.U, t = inst.cells[cc], out = {cls:"", html:""};
+  /* hidden column: a row that is still waiting for the branch shows "?" whether or not something will be fetched */
+  if (!t && inst.phantom && cc > v && cc === inst.lastC + 1){ out.cls = "q"; out.html = "?"; return out; }
+  /* after a flush: the bubble that took the instruction's place, in gray */
+  if (!t && inst.bub && inst.bub[cc]){
+    if (cc > v){ out.cls = "q"; out.html = "?"; return out; }
+    out.cls = "bub"; out.html = "<span class=\"bs\">" + inst.bub[cc] + "</span><small>bubble</small>"; return out;
+  }
+  if (!t) return out;
+  if (cc > v){ out.cls = "q"; out.html = "?"; return out; }
+  function lab(s){ return "<small><span>" + s + "</span></small>"; }
+  var rec = U.cycles[cc];
+  if (!inst.phantom && inst.discardedAt === cc && !(rec.error && rec.error.id === inst.id)){ out.cls = "flushed"; out.html = "<span class=\"bg\"><s>" + t + "</s></span>" + lab("discarded"); return out; }
+  if (t === "stall"){
+    var wk = inst.waitKind[cc];
+    out.cls = (wk === "memwait" && !sol()) ? "wrong" : "stall";
+    out.html = "<span class=\"bg\">stall</span>" + (wk === "memwait" ? lab("(memory busy)" + (sol() ? "" : " ✗")) : wk === "branchwait" ? lab(rec.stall ? "(load-use)" : "(branch)")
+      : (inst.collide && inst.collide.c === cc) ? lab("(memory busy)") : "");
+    return out;
+  }
+  var p = inst.pv || null, bad = wpAt(inst, cc), pc = prodC(inst);
+  var x = (bad || (pc && cc > pc && inst.e.op !== "beq")) ? " ✗" : "";
+  if (rec.error && rec.error.id === inst.id){ out.cls = "err"; out.html = "<span class=\"bg\">" + t + " ✗</span>" + lab("error"); return out; }
+  if (t.indexOf("flushed:") === 0){ out.cls = "flushed"; out.html = "<span class=\"bg\"><s>" + t.slice(8) + "</s></span>" + lab("flushed"); return out; }
+  if (t === "IF" && inst.refetchC === cc && !bad){ out.html = "IF" + lab("fetched again"); return out; }
+  if (t === "ID" && newReads(inst, cc).length){ out.html = "ID<small class=\"lab\"><span>reads new value</span></small>"; return out; }
+  if (t === "EX"){
+    var prod1 = inst.fwdOut.some(function(f){ return f.path === "P1" && f.c <= v; });
+    var pl = prod1 ? "<small class=\"lab\"><span>" + rn(inst.dest) + " in EX/MEM</span></small>" : "";
+    if (bad){ out.cls = "wp"; out.html = "EX ✗"; return out; }
+    if (inst.e.op === "beq"){
+      if (p && p.wrong){ out.cls = "wrong"; out.html = "<span class=\"bg\">EX ★ ✗</span>" + lab(reasonShort(inst)); }
+      else if (p && p.ignored){ out.cls = "wrong"; out.html = "<span class=\"bg\">EX ★</span>" + lab("taken, but ignored ✗"); }
+      else { out.cls = "br"; out.html = "<span class=\"bg\">EX <span class=\"bstar\">★</span></span>" + lab(forwarded(inst).length ? "resolves, forwarded" : "resolves"); }
+      return out;
+    }
+    if (forwarded(inst).length){ out.cls = "fwd"; out.html = "EX" + lab("forwarded") + pl; return out; }
+    if (p && p.wrong && p.at === "EX"){ out.cls = "wrong"; out.html = "<span class=\"bg\">EX ✗</span>" + lab(reasonShort(inst)); return out; }
+    out.html = "EX" + (p && p.neutral ? lab("old " + rn(p.neutral.reg) + ", same result") : "") + pl; return out;
+  }
+  if (t === "MEM"){
+    var prod2 = inst.fwdOut.some(function(f){ return f.path === "P2" && f.c <= v; });
+    if (p && p.wrong && p.at === "MEM" && cc === pc && !bad){ out.cls = "wrong"; out.html = "<span class=\"bg\">MEM ✗</span>" + lab(reasonShort(inst)); return out; }
+    out.html = "MEM" + x + (prod2 ? "<small class=\"lab\"><span>" + rn(inst.dest) + " in MEM/WB</span></small>" : "");
+    if (x) out.cls = "wp"; return out;
+  }
+  out.html = t + x; if (x) out.cls = "wp";
+  if (bad && t === "IF") out.html += lab("should not run");
+  return out;
+}
+function rowKey(r){ return r.phantom ? "P" + r.firstC : String(r.id); }
+function rowName(r, v){
+  if (r.phantom){
+    if (r.kind === "memwait"){
+      /* the taken branch is in EX in the last waiting cycle, so the row is known to be on the wrong path from that cycle on */
+      if (r.flushBy && v >= r.lastC) return "<span class=\"wait\">(not fetched: wrong path of the taken branch I" + r.flushBy + ")</span>";
+      return "<b>I" + r.id + ":</b> <span class=\"wait\">next instruction (waiting for the memory)</span>";
+    }
+    var bx = I(r.by).exC;
+    if (bx && v > bx) return "<span class=\"wait\">(no instruction: nothing was left to fetch)</span>";
+    return "<b>I" + r.id + ":</b> <span class=\"wait\">next instruction (waiting for the branch)</span>";
+  }
+  if (r.ifC > v){
+    var lastWait = r.waitKind[Math.min(v, r.ifC - 1)];
+    return "<b>I" + r.id + ":</b> <span class=\"wait\">next instruction (waiting for the " + (lastWait === "memwait" ? "memory" : "branch") + ")</span>";
+  }
+  var sp = r.text.indexOf(" "), name = "<b>I" + r.id + ":</b> " + (sp < 0 ? esc(r.text) : esc(r.text.slice(0, sp)) + "<span class=\"opnd\">" + esc(r.text.slice(sp)) + "</span>");
+  if (wpAt(r, v)) name += "<span class=\"wp\">✗ should not run</span>";
+  return name;
+}
+var arrowList = [];
+/* Size the table to the space it has: narrower cycle columns when a run is a little too wide, larger text when there is room. */
+function fitTable(nc, nr){
+  var tt = $("tt"), sc = $("ttScroll");
+  tt.style.setProperty("--tts", "1"); tt.style.setProperty("--ccw", "5.3em"); tt.classList.remove("tight");
+  var th = tt.querySelector("thead th.ccol");
+  if (!nc || !th) return;
+  var fs = parseFloat(getComputedStyle(tt).fontSize) || 13;
+  var colW = th.getBoundingClientRect().width, W0 = tt.offsetWidth, H0 = tt.offsetHeight, aw = sc.clientWidth, ah = sc.clientHeight;
+  var fixed = W0 - nc * colW;
+  if (W0 > aw){
+    /* a run wider than the panel scrolls sideways. The columns get a little wider so that a whole number of them fits between
+       the two fixed columns: no column is ever shown cut in half. (They cannot be narrower than their labels.) */
+    var flc = tt.querySelector("thead .flc"), area = aw - tt.querySelector("thead .insc").offsetWidth - (getComputedStyle(flc).position === "sticky" ? flc.offsetWidth : 0), n = Math.floor(area / colW);
+    /* a run that is only a little too wide is shown whole, with less padding in the cells */
+    if (area / nc >= 4.8 * fs){ tt.classList.add("tight"); tt.style.setProperty("--ccw", ((area / nc - 0.02) / fs).toFixed(4) + "em"); if (tt.offsetWidth <= aw + 1) return; tt.classList.remove("tight"); }
+    if (n >= 1) tt.style.setProperty("--ccw", ((area / n - 0.02) / fs).toFixed(4) + "em");
+    return;
+  }
+  if (window.innerWidth < 1100) return;      /* one-column layout: the text size stays as it is */
+  var headH = tt.tHead.offsetHeight, rowH = nr ? (H0 - headH) / nr : 2.8 * fs;
+  var s = Math.min(aw / (fixed + Math.max(nc, 10) * colW), ah / (headH + Math.max(nr, 5) * rowH + 2), isFocus() ? 2.4 : 1.6);
+  s = Math.floor(s * 20) / 20;
+  if (!(s > 1)) return;
+  tt.style.setProperty("--tts", s.toFixed(2));
+  var guard = 0;
+  while (s > 1 && guard++ < 8 && (tt.offsetWidth > aw || tt.offsetHeight > ah)){ s -= 0.05; tt.style.setProperty("--tts", Math.max(1, s).toFixed(2)); }
+}
+function renderTable(){
+  /* the table shows CC1 up to the current cycle: going back takes the later columns away */
+  var U = S.U, v = Math.min(vis(), S.cur), hid = curHidden(), hi = S.cur, lo = 1, W = 40, h, i, cc;
+  if (hi > 60) lo = hi - W + 1;
+  var rows = S.rows.filter(function(it){ return it.firstC <= Math.min(hi, v) && it.dispLast >= lo; });
+  var winNote = "";
+  if (S.reached > 60){      /* shown for the whole long run, also after going back to an early cycle */
+    winNote = "<span class=\"note\" id=\"winNote\">Long run: showing CC" + lo + " to CC" + hi + ".</span>" +
+      "<button type=\"button\" data-win=\"-1\"" + (S.cur <= 1 ? " disabled" : "") + " title=\"Go back 40 clock cycles\">◀ 40 cycles back</button>" +
+      "<button type=\"button\" data-win=\"1\"" + (S.cur >= S.reached ? " disabled" : "") + " title=\"Go forward 40 clock cycles\">40 cycles forward ▶</button>" +
+      "<label class=\"goto\">Go to CC <input type=\"text\" inputmode=\"numeric\" id=\"gotoCC\" maxlength=\"5\" aria-label=\"Go to clock cycle\"></label><button type=\"button\" id=\"gotoBtn\">Go</button>";
+  }
+  /* under each CC number: one clock period. The rising edge at the left border is where the pipeline registers store their new contents. */
+  var CLK = "<svg class=\"clk\" viewBox=\"0 0 100 10\" preserveAspectRatio=\"none\" aria-hidden=\"true\"><path d=\"M0 9 L0 1 L50 1 L50 9 L100 9\"/></svg>";
+  h = "<thead><tr><th class=\"insc\" scope=\"col\">Instruction<span class=\"clkl\" title=\"The clock: each rising edge (↑) starts a new clock cycle, and the pipeline registers store their new contents at that edge.\">clock ↑</span></th>";
+  for (cc = lo; cc <= hi; cc++) h += "<th scope=\"col\" class=\"ccol" + (cc === S.cur ? " cur" : "") + "\" id=\"h" + cc + "\"><button type=\"button\" class=\"cc\" data-cc=\"" + cc + "\" title=\"Jump to CC" + cc + "\"" + (cc === S.cur ? " aria-current=\"true\"" : "") + ">CC" + cc + CLK + "</button></th>";
+  h += "<th class=\"flc\" scope=\"col\">Flushed?</th></tr></thead><tbody>";
+  if (!rows.length && !hid) h += "<tr><td class=\"insc\"><span class=\"wait\">" + (U.inst.length ? "Rows appear as instructions are fetched." : "No traced instruction.") + "</span></td><td class=\"flc\"></td></tr>";
+  arrowList = [];
+  var p1 = false, p2 = false, taken = {};
+  for (i = 0; i < rows.length; i++){
+    var it = rows[i], key = rowKey(it);
+    h += "<tr><th class=\"insc" + (!it.phantom && it.text.length > 30 ? " long" : "") + "\" scope=\"row\" style=\"font-weight:400\">" + rowName(it, v) + "</th>";
+    for (cc = lo; cc <= hi; cc++){
+      var ci = cellInfo(it, cc, v);
+      h += "<td id=\"c" + key + "_" + cc + "\" class=\"" + ci.cls + (cc === S.cur ? " cur" : "") + "\">" + ci.html + "</td>";
+    }
+    var fl = "";
+    if (it.phantom) fl = "";
+    else if (it.flushed && it.flushedAt <= v) fl = "YES";
+    else if (it.discardedAt && it.discardedAt <= v) fl = it.error ? "NO (error)" : "NO (discarded)";
+    else if (it.exC && it.exC <= v) fl = "NO";
+    h += "<td class=\"flc\">" + fl + "</td></tr>";
+    if (it.phantom) continue;
+    /* arrows that end in this row */
+    if (sol() && it.exC && it.exC <= v && it.exC > lo){
+      var fws = forwarded(it);
+      fws.forEach(function(s){
+        arrowList.push({from:"c" + s.from + "_" + (it.exC - 1), to:"c" + it.id + "_" + it.exC, kind:s.path, two:fws.length > 1});
+        if (s.path === "P1") p1 = true; else p2 = true;
+      });
+    }
+    if (sol() && it.e.op === "beq" && it.exC && it.exC <= v && it.taken && it.exC >= lo && it.exC < hi){
+      taken[it.e.label] = true;
+      var rs = U.cycles[it.exC].resolve;
+      if (U.branch === "pnt" && rs.targetId && I(rs.targetId).ifC <= v) arrowList.push({from:"c" + it.id + "_" + it.exC, to:"c" + rs.targetId + "_" + I(rs.targetId).ifC, kind:"BR"});
+    }
+  }
+  /* a hidden cycle always shows exactly one placeholder row, whether or not a row starts in it */
+  if (hid){
+    h += "<tr id=\"phRow\"><th class=\"insc\" scope=\"row\" style=\"font-weight:400\"><b>?</b> <span class=\"wait\">Is a new instruction fetched in CC" + S.cur + "?</span></th>";
+    for (cc = lo; cc <= hi; cc++) h += "<td id=\"cQ_" + cc + "\" class=\"" + (cc === S.cur ? "q cur" : "") + "\">" + (cc === S.cur ? "?" : "") + "</td>";
+    h += "<td class=\"flc\"></td></tr>";
+  }
+  h += "</tbody>";
+  var nowBox = $("now");
+  nowBox.style.maxHeight = ""; nowBox.style.minHeight = ""; nowBox.classList.remove("more"); nowBox.scrollTop = 0;
+  $("ttInner").style.paddingBottom = "";
+  $("tt").innerHTML = wx(h);
+  var b = winNote;
+  if (p1) b += "<span class=\"badge\"><span class=\"num\">1</span> Path 1: EX/MEM → EX</span>";
+  if (p2) b += "<span class=\"badge\"><span class=\"num\">2</span> Path 2: MEM/WB → EX</span>";
+  Object.keys(taken).forEach(function(l){ b += "<span class=\"badge b\"><span class=\"num\" aria-label=\"star\">" + STAR_SVG + "</span> branch taken → PC ← " + esc(l) + "</span>"; });
+  $("badges").innerHTML = wx(b);
+  fitTable(hi - lo + 1, rows.length + (hid ? 1 : 0));
+  drawArrows();
+  /* keep the current column (snapped to whole columns) and the rows that are busy in it in view */
+  var sc = $("ttScroll"), th = $("h" + S.cur);
+  if (th){
+    var insW = $("tt").querySelector("thead .insc").offsetWidth, flW = $("tt").querySelector("thead .flc").offsetWidth, cw = th.getBoundingClientRect().width;
+    if (getComputedStyle($("tt").querySelector("thead .flc")).position !== "sticky") flW = 0;
+    var left = th.offsetLeft, right = left + th.offsetWidth, sl = sc.scrollLeft;
+    if (right > sl + sc.clientWidth - flW) sl = right - sc.clientWidth + flW;
+    if (left < sl + insW) sl = Math.max(0, left - insW);
+    if (cw > 0) sl = Math.round(sl / cw) * cw;
+    sc.scrollLeft = sl;
+    var firstRow = null, lastRow = null;
+    for (i = 0; i < rows.length; i++){ if (rows[i].cells[S.cur]){ var cell = $("c" + rowKey(rows[i]) + "_" + S.cur); if (!firstRow) firstRow = cell; lastRow = cell; } }
+    if (hid) lastRow = $("cQ_" + S.cur);
+    if (lastRow){
+      if (!firstRow) firstRow = lastRow;
+      var headH = $("tt").tHead.offsetHeight, top = firstRow.parentNode.offsetTop, tr = lastRow.parentNode, bot = tr.offsetTop + tr.offsetHeight;
+      /* Low windows: when the rows that are busy in this cycle do not all fit, the Now box gives up some of its height
+         (never less than about two lines; its text then scrolls inside the box) and the table gets that room. */
+      var lack = bot - top + headH - sc.clientHeight;
+      if (lack > 0 && window.innerWidth >= 1100 && !hid){
+        var nh0 = nowBox.offsetHeight, nmin = 3.5 * (parseFloat(getComputedStyle(nowBox).fontSize) || 14), nh = Math.max(nmin, nh0 - lack - 3);
+        if (nh < nh0){ nowBox.style.minHeight = "0"; nowBox.style.maxHeight = nh.toFixed(1) + "px"; }
+      }
+      if (bot - top + headH > sc.clientHeight) top = Math.max(top, bot - sc.clientHeight + headH);   /* too many busy rows: the newest ones win */
+      if (bot > sc.scrollTop + sc.clientHeight) sc.scrollTop = bot - sc.clientHeight + 2;
+      if (top < sc.scrollTop + headH) sc.scrollTop = Math.max(0, top - headH);
+      /* never leave a row half hidden under the fixed header: the first visible row starts exactly under it */
+      var trs = $("tt").tBodies[0].rows, st2 = sc.scrollTop;
+      if (st2 > 0){
+        for (i = 0; i < trs.length; i++){
+          if (trs[i].offsetTop - headH >= st2 - 1){
+            var want = trs[i].offsetTop - headH, maxTop = sc.scrollHeight - sc.clientHeight;
+            if (want > maxTop) $("ttInner").style.paddingBottom = Math.ceil(want - maxTop) + "px";   /* room to scroll one whole row further */
+            sc.scrollTop = want; break;
+          }
+        }
+        if (firstRow.parentNode.offsetTop - headH < sc.scrollTop - 1 && bot - (firstRow.parentNode.offsetTop - headH) <= sc.clientHeight) sc.scrollTop = firstRow.parentNode.offsetTop - headH;
+      }
+    }
+  } else if (S.cur === 0){ sc.scrollLeft = 0; sc.scrollTop = 0; }
+  /* when the Now text does not fit in its box, the box says so (its text scrolls inside) */
+  nowBox.classList.toggle("more", nowBox.scrollHeight > nowBox.clientHeight + 1);
+  drawArrows();      /* again, now that the scroll position is final */
+}
+function drawArrows(){
+  var svg = $("arrows"), tt = $("tt"), inner = $("ttInner");
+  var Wd = tt.offsetWidth, Ht = tt.offsetHeight;
+  svg.setAttribute("width", Wd); svg.setAttribute("height", Ht); svg.setAttribute("viewBox", "0 0 " + Wd + " " + Ht);
+  var u = (parseFloat(getComputedStyle(tt).fontSize) || 13) / 1.15;
+  var sw = Math.max(1.6, u * 0.15), fsz = Math.max(11, u * 0.95), rad = fsz * 0.64;
+  /* all arrows: solid and thick with a white halo; forwarding in the brown of the "Forwarded" cells (FW), the taken branch
+     in the blue of the "Branch resolves" cell (BRC). Shape and mark tell them apart too: 1 or 2 versus the star. */
+  var BRC = "#1a3fb0", FW = "#8a4513", swf = Math.max(2.6, u * 0.22), headf = u * 0.95;
+  var h = "<defs><marker id=\"ah\" viewBox=\"0 0 10 10\" refX=\"8.5\" refY=\"5\" markerWidth=\"" + headf + "\" markerHeight=\"" + headf + "\" markerUnits=\"userSpaceOnUse\" orient=\"auto\"><path d=\"M0 0 L10 5 L0 10 z\" fill=\"" + BRC + "\" stroke=\"#fff\" stroke-width=\"0.9\"/></marker>" +
+    "<marker id=\"ahf\" viewBox=\"0 0 10 10\" refX=\"8.5\" refY=\"5\" markerWidth=\"" + headf + "\" markerHeight=\"" + headf + "\" markerUnits=\"userSpaceOnUse\" orient=\"auto\"><path d=\"M0 0 L10 5 L0 10 z\" fill=\"" + FW + "\" stroke=\"#fff\" stroke-width=\"0.9\"/></marker></defs>";
+  var marks = "", sc = $("ttScroll"), insc = tt.querySelector("thead .insc"), flc = tt.querySelector("thead .flc");
+  var ir = inner.getBoundingClientRect();
+  /* an arrow that would start or end under one of the two fixed columns is not drawn */
+  var visL = sc.scrollLeft + (insc ? insc.offsetWidth : 0), visR = sc.scrollLeft + sc.clientWidth - (flc && getComputedStyle(flc).position === "sticky" ? flc.offsetWidth : 0);
+  var headH = tt.tHead.offsetHeight;
+  function f1(x){ return x.toFixed(1); }
+  /* the plain star of a branch cell is made invisible (it stays in the text) only while its circled star is drawn over it */
+  tt.querySelectorAll(".bstar").forEach(function(s){ s.style.color = ""; });
+  arrowList.forEach(function(a){
+    var p = $(a.from), q = $(a.to);
+    if (!p || !q) return;
+    var pl = p.offsetLeft, pt = p.offsetTop, pr = pl + p.offsetWidth, pb = pt + p.offsetHeight;
+    /* A forwarding arrow is one straight line. Its tail is the round mark (1 = Path 1, 2 = Path 2) on the right border of
+       the producing cell, level with its label ("$s1 in EX/MEM" or "$s1 in MEM/WB"); its head ends inside the EX cell
+       that uses the value, just left of the stage name. Producer and user are always in two columns side by side.
+       A taken-branch arrow starts at the circled star after "EX" in the branch cell (it takes the place of the plain star),
+       runs right to the column border, down that border (so it never crosses the flushed cells), and turns into the
+       IF cell of the branch target. A white halo keeps the cells under every arrow readable. */
+    var labs = p.querySelectorAll("small span"), lab = labs.length ? labs[labs.length - 1] : null, sx, sy, lr = null;
+    if (lab && lab.getClientRects().length){
+      var rs = lab.getClientRects(); lr = rs[rs.length - 1];
+      sx = Math.min(lr.right - ir.left + 0.45 * u, pr - 0.45 * u); sy = (lr.top + lr.bottom) / 2 - ir.top;
+    } else { sx = pr - 0.6 * u; sy = pt + p.offsetHeight * 0.5; }
+    var bx = pr + (a.two ? (a.kind === "P1" ? 0.24 : -0.24) * u : 0);
+    /* drawn only when its mark is clear of the fixed Instruction column and the stage name of the target cell is clear of
+       the fixed "Flushed?" column (when the table is scrolled sideways) */
+    if (pr - rad - 1 < visL || q.offsetLeft + q.offsetWidth * 0.62 > visR) return;
+    if (sy < sc.scrollTop + headH + 2) return;      /* its first row is scrolled away under the header */
+    var d, mx, my, col;
+    if (a.kind === "BR"){
+      var bg = p.querySelector(".bg"), gr = bg && bg.getClientRects().length ? bg.getBoundingClientRect() : null;
+      var st = p.querySelector(".bstar"), sr = st && st.getClientRects().length ? st.getBoundingClientRect() : null;
+      if (sr){ st.style.color = "transparent"; sx = (sr.left + sr.right) / 2 - ir.left; sy = (sr.top + sr.bottom) / 2 - ir.top; }
+      else if (gr){ sx = Math.min(gr.right - ir.left + 0.35 * u, bx - 1.2 * u); sy = (gr.top + gr.bottom) / 2 - ir.top; }
+      var tx = q.offsetLeft + 1.9 * u, ty = q.offsetTop + q.offsetHeight * 0.5;
+      if (ty <= sy + 2) ty = sy + 3;
+      d = "M" + f1(sx) + " " + f1(sy) + " L" + f1(bx) + " " + f1(sy) + " L" + f1(bx) + " " + f1(ty) + " L" + f1(tx) + " " + f1(ty);
+      col = BRC;
+      h += "<path d=\"" + d + "\" fill=\"none\" stroke=\"#fff\" stroke-width=\"" + f1(swf + Math.max(3, u * 0.28)) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\" opacity=\".95\"/>";
+      h += "<path class=\"arr\" data-kind=\"" + a.kind + "\" data-from=\"" + a.from + "\" data-to=\"" + a.to + "\" d=\"" + d + "\" fill=\"none\" stroke=\"" + BRC + "\" stroke-width=\"" + f1(swf) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\" marker-end=\"url(#ah)\"/>";
+      mx = sx; my = sy;
+    } else {
+      var qt = q.offsetTop, ex = q.offsetLeft + (a.two && a.kind === "P1" ? 1.9 : 1.5) * u, ey = qt + (a.two && a.kind === "P1" ? 1.0 : 1.35) * u;
+      /* a label that reaches the border would touch the mark: the mark then sits just under the label, still on the border */
+      var nb = p.nextElementSibling, low = -1;
+      if (lr && lr.right - ir.left > pr - rad - 2.5) low = lr.bottom - ir.top;
+      /* a line of the label in the next cell of the same row can reach the border from the right in narrow columns */
+      if (nb) nb.querySelectorAll("small span").forEach(function(x){
+        Array.prototype.forEach.call(x.getClientRects(), function(r){
+          if (r.left - ir.left < pr + rad + 2.5 && r.top - ir.top < sy + rad && r.bottom - ir.top > sy - rad) low = Math.max(low, r.bottom - ir.top);
+        });
+      });
+      if (low >= 0) sy = Math.min(low + rad * 0.85, pb - 1);
+      mx = pr; my = sy;
+      d = "M" + f1(mx) + " " + f1(my) + " L" + f1(ex) + " " + f1(ey);
+      col = FW;
+      h += "<path d=\"" + d + "\" fill=\"none\" stroke=\"#fff\" stroke-width=\"" + f1(swf + Math.max(3, u * 0.28)) + "\" stroke-linecap=\"round\" opacity=\".95\"/>";
+      h += "<path class=\"arr\" data-kind=\"" + a.kind + "\" data-from=\"" + a.from + "\" data-to=\"" + a.to + "\" d=\"" + d + "\" fill=\"none\" stroke=\"" + FW + "\" stroke-width=\"" + f1(swf) + "\" stroke-linecap=\"round\" marker-end=\"url(#ahf)\"/>";
+    }
+    /* the round mark at the tail names the arrow: 1 = Path 1, 2 = Path 2, star = taken branch (as in the badges under the table) */
+    marks += "<g class=\"amark\" data-kind=\"" + a.kind + "\"><circle cx=\"" + f1(mx) + "\" cy=\"" + f1(my) + "\" r=\"" + f1(rad) + "\" fill=\"#fff\" stroke=\"" + col + "\" stroke-width=\"" + f1(Math.max(1.4, sw * 0.9)) + "\"/>" +
+      (a.kind === "BR" ? "<polygon points=\"" + starPts(mx, my, rad * 0.72) + "\" fill=\"#000\"/></g>" :
+      "<text x=\"" + f1(mx) + "\" y=\"" + f1(my) + "\" dy=\".35em\" text-anchor=\"middle\" font-size=\"" + f1(fsz) + "\" font-weight=\"800\" fill=\"#000\">" + (a.kind === "P1" ? "1" : "2") + "</text></g>");
+  });
+  svg.innerHTML = h + marks;
+}
+/* a five-pointed star as a polygon, so it is exactly centered in its circle in every font */
+function starPts(cx, cy, R){
+  var p = [], i, a, r;
+  for (i = 0; i < 10; i++){ a = -Math.PI / 2 + i * Math.PI / 5; r = i % 2 ? R * 0.42 : R; p.push((cx + r * Math.cos(a)).toFixed(1) + "," + (cy + 0.06 * R + r * Math.sin(a)).toFixed(1)); }
+  return p.join(" ");
+}
+var STAR_SVG = "<svg class=\"star\" viewBox=\"-10 -10 20 20\" aria-hidden=\"true\"><polygon points=\"0,-9.4 2.2,-2.5 9.0,-2.3 3.6,2.2 5.5,8.6 0,4.6 -5.5,8.6 -3.6,2.2 -9.0,-2.3 -2.2,-2.5\" fill=\"currentColor\"/></svg>";
+function renderKey(){
+  var h = "<b>Key:</b><span><span class=\"sw stall\"></span>Stall</span>";
+  if (S.opt.view !== "problem") h += "<span title=\"Forwarding is also called bypassing. The solid arrow runs from the pipeline register that holds the value to the EX stage that uses it: 1 = Path 1 (EX/MEM), 2 = Path 2 (MEM/WB).\"><span class=\"sw fwd\"></span><span class=\"sw arrow\"></span>Forwarded</span>";
+  h += "<span><span class=\"sw br\"></span>★ Branch resolves</span>";
+  if (S.opt.view !== "problem") h += "<span><span class=\"sw flushed\"></span>Flushed</span><span title=\"A flushed instruction becomes a bubble (no-operation) that still passes through the later stages\"><span class=\"sw bub\"></span>Bubble</span>";
+  h += "<span><span class=\"sw cur\"></span>Current cycle</span>";
+  if (S.U.fault && vis() >= S.U.fault.c) h += "<span title=\"The instruction that caused the runtime error\"><span class=\"sw err\"></span>✗ Runtime error</span><span><span class=\"sw flushed\"></span>Discarded (runtime error)</span>";
+  if (S.opt.view === "problem") h += "<span><span class=\"sw wrong\"></span>✗ Wrong result or should not run</span>";
+  $("key").innerHTML = wx(h);
+}
+function renderControls(){
+  var end = atEnd() && S.revealed;
+  $("btnPrev").disabled = S.cur === 0;
+  var bn = $("btnNext");
+  bn.disabled = end;
+  if (!S.revealed){ bn.innerHTML = "Show CC" + S.cur + " &#9654;"; bn.classList.add("show"); bn.title = "Show what happens in CC" + S.cur + " (Space or Right arrow)"; }
+  else { bn.innerHTML = "Next cycle &#9654;"; bn.classList.remove("show"); bn.title = "Advance one clock cycle (Space or Right arrow)"; }
+  $("btnPlay").disabled = !!S.timer || end;
+  $("btnPause").disabled = !S.timer;
+  $("btnEnd").disabled = end;
+  $("btnReset").disabled = S.cur === 0 && S.reached === 0;
+  var ms = speedMs();
+  $("speedText").textContent = (ms / 1000) + " s / cycle";
+}
+function renderNow(){
+  var n = $("now"), c = S.cur, rec = c > 0 ? S.U.cycles[c] : null;
+  n.className = "now";
+  if (curHidden()){
+    n.classList.add("predict");
+    n.innerHTML = "<b>Predict CC" + c + ":</b> which stage is each instruction in? Is there a stall, a flush or a forwarding path? Then press <b>Show CC" + c + "</b> (or Space) to check.";
+    return;
+  }
+  if (rec && (rec.error || rec.stop)) n.classList.add("err");
+  n.innerHTML = wx((S.note ? "<span class=\"notice\">" + esc(S.note) + "</span>" : "") + nowHTML(c));
+  n.scrollTop = 0;
+}
+function lostUpTo(c){
+  var o = {loaduse:0, branch:0, memory:0}, L = S.U.lostAt;
+  for (var i = 0; i < L.length; i++){ if (L[i].c <= c) o[L[i].type]++; }
+  return o;
+}
+function renderCounters(){
+  var U = S.U, res = S.res, c = S.cur, hid = curHidden(), done = 0, i;
+  for (i = 0; i < U.inst.length; i++){ if (U.inst[i].wbC && U.inst[i].wbC <= c) done++; }
+  var lost = lostUpTo(c);
+  function kv(k, v2){ return "<div class=\"kv\"><span class=\"k\">" + k + "</span><span class=\"v\">" + (hid ? "?" : v2) + "</span></div>"; }
+  var h = "<div class=\"kv\"><span class=\"k\">Clock cycle</span><span class=\"v\" id=\"cntCycle\">" + (c === 0 ? "before CC1" : "CC" + c) + "</span></div>";
+  /* the Problem view has no stalls and no branch handling, so those two counters do not apply there */
+  function na(k){ return "<div class=\"kv na\"><span class=\"k\">" + k + "</span><span class=\"v\">not used in the Problem view</span></div>"; }
+  h += kv("Completed instructions", done) + (sol() ? kv("Load-use stall cycles", lost.loaduse) + kv("Cycles lost to branches", lost.branch) : na("Load-use stall cycles") + na("Cycles lost to branches"));
+  if (U.memory === "shared") h += kv("Cycles lost to the shared memory", lost.memory);
+  if (atEnd() && !hid && U.last > 0 && !res.runtimeError && res.n >= 1){
+    var stalls = res.total - (res.n + 4);
+    h += "<div class=\"total\" id=\"total\">Total = n + 4 + Stalls = " + res.n + " + 4 + " + stalls + " = " + res.total + " cycles</div>";
+  } else if (atEnd() && !hid && res.runtimeError){
+    h += "<div class=\"total\" id=\"total\">Stopped in CC" + res.errorCycle + (U.fault && U.fault.c !== res.errorCycle ? " (runtime error in CC" + U.fault.c + ")" : "") + ": the run did not finish, so there is no total.</div>";
+  } else {
+    h += "<div class=\"total wait\" id=\"total\">Total = n + 4 + Stalls: shown at the end of the run. Stalls = every lost cycle.</div>";
+  }
+  $("counters").innerHTML = h;
+}
+function histEntry(hist, c){ var e = hist[0]; for (var i = 1; i < hist.length; i++){ if (hist[i].c <= c) e = hist[i]; else break; } return e; }
+function histAt(hist, c){ return histEntry(hist, c).v; }
+function wrongTag(hist, c){ var t = taintTag(histEntry(hist, c).id, c); return t ? "<span class=\"tagw bad\">" + esc(t) + "</span>" : ""; }
+function renderValues(){
+  var U = S.U, c = S.cur, hid = curHidden(), rec = c > 0 ? U.cycles[c] : null, h = "<h3>Registers used</h3>", i;
+  if (!S.regsUsed.length) h += "<p class=\"note\">No register is used yet.</p>";
+  /* a hidden cycle shows "?" on every row, so the rows do not tell which register or word changes */
+  for (i = 0; i < S.regsUsed.length; i++){
+    var r = S.regsUsed[i], wr = rec && rec.regWrite && rec.regWrite.reg === r ? rec.regWrite : null;
+    var at = (r === 1 && S.atNote) ? "<span class=\"f\">set by a li setup line: li of a 32-bit value becomes two instructions that use $at</span>" : "";
+    if (hid) h += "<div class=\"kv\"><span class=\"k mono\">" + rn(r) + "</span><span class=\"v\">?</span></div>";
+    else if (wr) h += "<div class=\"kv chg\"><span class=\"k mono\">" + rn(r) + "</span><span class=\"v\">" + valH(wr.old) + " → " + valH(wr.val) + "<span class=\"tagw\">written in WB by I" + wr.id + "</span>" + wrongTag(U.regHist[r], c) + "</span></div>";
+    else h += "<div class=\"kv\"><span class=\"k mono\">" + rn(r) + "</span><span class=\"v\">" + valH(histAt(U.regHist[r], c)) + at + wrongTag(U.regHist[r], c) + "</span></div>";
+  }
+  h += "<h3>Memory used</h3>";
+  var dataAt = {}; U.prog.data.forEach(function(dw){ dataAt[dw.addr] = true; });
+  var words = U.memTouch.filter(function(m){ return m.c <= (hid ? c - 1 : c); }).sort(function(a, b2){ return a.addr - b2.addr; });
+  if (!words.length) h += "<p class=\"note\">" + (hid ? "No memory word had been read or written before this cycle." : "No memory word has been read or written yet.") + "</p>";
+  for (i = 0; i < words.length; i++){
+    var a = words[i].addr, mw = rec && rec.memWrite && rec.memWrite.addr === a ? rec.memWrite : null, mr = rec && rec.memRead && rec.memRead.addr === a ? rec.memRead : null;
+    if (hid) h += "<div class=\"kv\"><span class=\"k mono\">" + C.hex32(a) + "</span><span class=\"v\">?</span></div>";
+    else if (mw) h += "<div class=\"kv chg\"><span class=\"k mono\">" + C.hex32(a) + "</span><span class=\"v\">" + valH(mw.old) + " → " + valH(mw.val) + "<span class=\"tagw\">written in MEM by I" + mw.id + "</span>" + wrongTag(U.memHist[a], c) + "</span></div>";
+    else h += "<div class=\"kv\"><span class=\"k mono\">" + C.hex32(a) + "</span><span class=\"v\">" + valH(histAt(U.memHist[a], c)) + (mr ? "<span class=\"tagw\">read in MEM by I" + mr.id + "</span>" : "") + (dataAt[a] && histEntry(U.memHist[a], c).c === 0 ? "<span class=\"f\">from the data section (.word)</span>" : "") + wrongTag(U.memHist[a], c) + "</span></div>";
+  }
+  $("paneValues").innerHTML = wx(h);
+}
+/* The three lines at the top of the register tab: when this content was stored, whose data it is, and what comes next.
+   A register holds data and control signals of one instruction, not the instruction itself (only IF/ID holds the instruction word). */
+function regLines(k, c){
+  var U = S.U, slot = U.cycles[c].slots[k], st = STAGES[k], out = [];
+  function who(id){ var q = I(id); return "I" + q.id + " (<code>" + esc(q.text) + "</code>)"; }
+  var held = slot.id && c > 1 && U.cycles[c - 1].slots[k].id === slot.id;
+  if (held) out.push("Not written at the start of CC" + c + " (stall): it keeps its content from CC" + (c - 1) + ", and " + st + " uses it again.");
+  else if (slot.id || (slot.hole !== "empty" && slot.hole !== "discard")) out.push("Stored at the start of CC" + c + "; " + st + " uses it now.");
+  if (slot.id) out.push(k === 1 ? "Instruction word of " + who(slot.id) + "." : "Data of " + who(slot.id) + ", not the instruction itself.");
+  if (!S.hide){      /* with Hide outputs on, the next cycle is for the user to predict */
+    if (c >= U.last) out.push("Next: nothing more is stored; the run ends in CC" + c + ".");
+    else {
+      var ns = U.cycles[c + 1].slots[k], what = !ns.id ? (ns.hole === "empty" || ns.hole === "discard" ? "nothing (empty)" : "a bubble (no-operation)")
+        : (k === 1 ? "instruction word of " : "data of ") + "I" + ns.id;
+      out.push(ns.id && ns.id === slot.id ? "Next: not written at the end of CC" + c + " (stall); it keeps I" + ns.id + "." : "Next, stored at the end of CC" + c + ": " + what + ".");
+    }
+  }
+  return out.map(function(t){ return "<div>" + t + "</div>"; }).join("");
+}
+function sig(ctl, names){ return names.map(function(n){ return "<span>" + n + " = " + ctl[n] + "</span>"; }).join(""); }
+function renderRegister(){
+  var U = S.U, c = S.cur, k = PREGS.indexOf(S.sel) + 1, i;
+  var h = "<div class=\"regsel\" role=\"group\" aria-label=\"Pipeline register\">";
+  for (i = 0; i < 4; i++) h += "<button type=\"button\" data-reg=\"" + PREGS[i] + "\" aria-pressed=\"" + (PREGS[i] === S.sel ? "true" : "false") + "\">" + PREGS[i] + "</button>";
+  h += "</div><div class=\"rt-title\" id=\"regTitle\">" + S.sel + (c === 0 ? " before CC1" : " in CC" + c) + "</div>";
+  if (c > 0 && !curHidden()) h += "<div class=\"rt-lines\" id=\"regLines\">" + regLines(k, c) + "</div>";
+  function row(a, b, extra){ return "<div class=\"kv\"><span class=\"k\">" + a + "</span><span class=\"v\">" + b + (extra ? "<span class=\"f\">" + extra + "</span>" : "") + "</span></div>"; }
+  if (c === 0){ $("paneRegister").innerHTML = h + "<div class=\"bubbleNote\">empty: nothing has been latched yet</div>"; return; }
+  if (curHidden()){ $("paneRegister").innerHTML = h + "<div class=\"bubbleNote\">? Hidden. Press Show CC" + c + " to see the contents.</div>"; return; }
+  var slot = U.cycles[c].slots[k];
+  if (!slot.id){
+    if (slot.hole === "empty") h += "<div class=\"bubbleNote\">empty: no instruction is in the " + STAGES[k] + " stage in this cycle</div>";
+    else {
+      var why;
+      if (slot.hole === "loaduse") why = c === slot.born ? "Reason: load-use hazard. I" + slot.from + " is held in ID in this cycle, so a stall bubble enters EX."
+        : "Reason: stall bubble from CC" + slot.born + ", when I" + slot.from + " was held in ID for one cycle (load-use hazard).";
+      else if (slot.hole === "flush") why = slot.from ? "Reason: I" + slot.from + " was flushed. It was fetched on the wrong path after the taken branch I" + slot.by + "." : "Reason: an empty fetch slot after the taken branch I" + slot.by + "; nothing was left to fetch, so no instruction was in this place.";
+      else if (slot.hole === "branchwait") why = "Reason: nothing was fetched in CC" + slot.born + ", because IF waited for the branch I" + slot.by + " (always stall).";
+      else if (slot.hole === "memwait") why = slot.re ? "Reason: I" + slot.re + " had to be fetched again in CC" + slot.born + ". Its fetch in CC" + (slot.born - 1) + " collided with I" + slot.by + ", which used the one shared memory in MEM."
+        : "Reason: nothing was fetched in CC" + slot.born + ", because the one shared memory was busy (I" + slot.by + " in MEM).";
+      else why = "Reason: the run stopped with a runtime error" + (U.fault ? " in CC" + U.fault.c + "; I" + U.fault.id + " and the instructions after it were discarded." : ".");
+      h += "<div class=\"bubbleNote\">" + (k === 1 ? "bubble (no-operation): IF/ID holds no instruction" : "bubble (no-operation): every control signal is 0") + "</div><p class=\"note\">" + why +
+        (k === 1 ? " IF/ID holds no control signals: they are made in ID." : "") + " A bubble changes no register and no memory word.</p>";
+    }
+    $("paneRegister").innerHTML = h; return;
+  }
+  var inst = I(slot.id), e = inst.e, ctl = C.ISA[e.op].ctl, isR = C.ISA[e.op].type === "R", hasX = false;
+  h += "<h3>Data</h3>";
+  if (k === 1){
+    h += row("Fetched instruction", "<span class=\"mono\">" + esc(inst.text) + "</span>", "machine code " + C.hex32(e.mc));
+    h += row("PC + 4", C.hex32(inst.pc + 4));
+  } else if (k === 2){
+    var two = [["rs", e.rs, inst.rfRs], ["rt", e.rt, inst.rfRt]];
+    two.forEach(function(t){
+      var f = null;
+      inst.src.forEach(function(s){ if (s.reg === t[1] && (s.path === "P1" || s.path === "P2")) f = s; });
+      var stale = null;      /* an old value that really differs from the correct one (same rule as the ✗ marks) */
+      if (inst.pv) inst.pv.staleBad.forEach(function(s){ if (s.reg === t[1]) stale = s; });
+      h += row("Register value " + t[0] + " (" + rn(t[1]) + ")", valH(t[2]),
+        f ? "old; forwarding gives EX the new value " + val(f.val) : stale ? "✗ old value: I" + stale.from + " has not written " + rn(t[1]) + " yet" : "");
+    });
+    var immBits = e.mc & 0xFFFF;
+    h += row("Sign-extended immediate", C.hex32(C.signExt16(immBits)), isR ? "the low 16 bits of the instruction; not used by " + e.op : "= " + val(C.signExt16(immBits)));
+    h += row("PC + 4", C.hex32(inst.pc + 4));
+    h += row("Register number rt", e.rt + " (" + rn(e.rt) + ")");
+    var rdField = (e.mc >>> 11) & 31;
+    h += row("Register number rd", rdField + (isR ? " (" + rn(rdField) + ")" : ""), isR ? "" : "bits 15-11 of the instruction; not a register for " + e.op);
+    h += "<h3>Control signals</h3>";
+    h += "<div class=\"sigrow\"><span class=\"k\">used in EX</span><span class=\"v\">" + sig(ctl, ["RegDst","ALUSrc","ALUOp","Branch"]) + "</span></div>";
+    h += "<div class=\"sigrow\"><span class=\"k\">used in MEM</span><span class=\"v\">" + sig(ctl, ["MemRead","MemWrite"]) + "</span></div>";
+    h += "<div class=\"sigrow\"><span class=\"k\">used in WB</span><span class=\"v\">" + sig(ctl, ["RegWrite","MemToReg"]) + "</span></div>";
+    hasX = ctl.RegDst === "X" || ctl.MemToReg === "X";
+  } else if (k === 3){
+    h += row("ALU result", valH(inst.alu), e.op === "lw" || e.op === "sw" ? "the memory address " + C.hex32(inst.alu) : e.op === "beq" ? "Zero = " + inst.zero + "; the branch was already decided at the end of EX" : "");
+    h += row("Value to write to memory", e.op === "sw" ? valH(inst.storeVal) : "not used", e.op === "sw" ? "the value of " + rn(e.rt) : "");
+    h += row("Destination register number", ctl.RegWrite === 1 ? C.destOf(e) + " (" + rn(C.destOf(e)) + ")" : "none", ctl.RegWrite === 1 ? "" : "RegWrite = 0");
+    h += "<h3>Control signals</h3>";
+    h += "<div class=\"sigrow\"><span class=\"k\">used in MEM</span><span class=\"v\">" + sig(ctl, ["MemRead","MemWrite"]) + "</span></div>";
+    h += "<div class=\"sigrow\"><span class=\"k\">used in WB</span><span class=\"v\">" + sig(ctl, ["RegWrite","MemToReg"]) + "</span></div>";
+    hasX = ctl.MemToReg === "X";
+  } else {
+    h += row("Value read from data memory", e.op === "lw" ? valH(inst.loaded) : "not used");
+    h += row("ALU result", valH(inst.alu));
+    h += row("Destination register number", ctl.RegWrite === 1 ? C.destOf(e) + " (" + rn(C.destOf(e)) + ")" : "none", ctl.RegWrite === 1 ? "" : "RegWrite = 0");
+    h += "<h3>Control signals</h3>";
+    h += "<div class=\"sigrow\"><span class=\"k\">used in WB</span><span class=\"v\">" + sig(ctl, ["RegWrite","MemToReg"]) + "</span></div>";
+    hasX = ctl.MemToReg === "X";
+  }
+  if (hasX) h += "<p class=\"note\">X = don't care</p>";
+  $("paneRegister").innerHTML = wx(h);
+}
+function sci(x){
+  var ex = Math.floor(Math.log10(x)), m = x / Math.pow(10, ex);
+  var ms = m.toFixed(2); if (ms === "10.00"){ ms = "1.00"; ex++; }
+  return ms + " × 10<sup>" + ex + "</sup>";
+}
+function renderPerf(){
+  var ids = ["pIF","pID","pEX","pMEM","pWB"], t = [], bad = false, i;
+  for (i = 0; i < 5; i++){
+    var el = $(ids[i]), s = el.value.trim(), ok = /^\d{1,6}$/.test(s) && +s >= 1 && +s <= 100000;
+    el.classList.toggle("bad", !ok); el.setAttribute("aria-invalid", ok ? "false" : "true");
+    if (!ok) bad = true; else t.push(+s);
+  }
+  if (bad){
+    $("perfMsg").textContent = "Enter a whole number from 1 to 100000 in every box.";
+    $("perfOut").innerHTML = "";
+    return;
+  }
+  $("perfMsg").textContent = "";
+  var tc = Math.max.apply(null, t), sum = t[0] + t[1] + t[2] + t[3] + t[4], res = S.res;
+  function row(a, b, f){ return "<div class=\"kv\"><span class=\"k\">" + a + "</span><span class=\"v\">" + b + (f ? "<span class=\"f\">" + f + "</span>" : "") + "</span></div>"; }
+  var h = "<h3>Results</h3>";
+  h += row("T<sub>cycle</sub>", tc + " ps", "the slowest stage");
+  h += row("Latency", (5 * tc) + " ps", "5 × T<sub>cycle</sub>: time for one instruction");
+  h += row("Steady-state throughput", sci(1e12 / tc) + " instructions per second", "1 / T<sub>cycle</sub>");
+  h += row("T<sub>single-cycle</sub>", sum + " ps", "the sum of the five stage times");
+  h += row("Ideal speedup", (sum / tc).toFixed(2), "T<sub>single-cycle</sub> / T<sub>cycle</sub>");
+  if (atEnd() && S.revealed && S.U.last > 0 && !res.runtimeError && res.n >= 1){
+    var st = res.total - (res.n + 4);
+    var pvNote = "";
+    if (!sol()){
+      var anyWrong = S.U.inst.some(function(q){ return q.pv && (!q.pv.onPath || q.pv.wrong || q.pv.ignored); });
+      pvNote = "<span class=\"f\" id=\"perfPV\">" + (anyWrong ? "(Problem view: wrong results; compare the Solution view)" : "(Problem view: a pipeline with no hazard fixes; compare the Solution view)") + "</span>";
+    }
+    h += "<div class=\"total\" id=\"perfRun\">Execution time of this program = total cycles × T<sub>cycle</sub> = " + res.total + " × " + tc + " = " + (res.total * tc) + " ps<span class=\"f\">(total cycles = n + 4 + Stalls = " + res.n + " + 4 + " + st + " = " + res.total + ")</span>" + pvNote + "</div>";
+  } else if (atEnd() && S.revealed && S.U.last > 0 && res.runtimeError){
+    h += "<div class=\"total wait\" id=\"perfRun\">No execution time: the run stopped (" + (S.U.guard ? "10,000-cycle limit" : "runtime error") + ").</div>";
+  } else h += "<div class=\"total wait\" id=\"perfRun\">Execution time of this program = total cycles × T<sub>cycle</sub>: shown when the run is finished.</div>";
+  $("perfOut").innerHTML = h;
+}
+function renderTabs(){
+  var map = {values:"Values", register:"Register", perf:"Perf"}, k;
+  for (k in map){
+    $("tab" + map[k]).setAttribute("aria-selected", S.tab === k ? "true" : "false");
+    $("pane" + map[k]).hidden = S.tab !== k;
+  }
+  if (S.tab === "values") renderValues(); else if (S.tab === "register") renderRegister(); else renderPerf();
+}
+/* The Now box is drawn before the table: its height decides how much room the table has. */
+function render(){
+  renderTop(); renderProgram(); renderStrip(); renderKey(); renderControls(); renderNow(); renderTable(); renderCounters(); renderTabs();
+  S.pulse = false;
+}
+
+/* ---------------- events ---------------- */
+/* After a keyboard action the same control keeps the keyboard focus, although the page was drawn again
+   (a mouse click leaves no focus, so Space still runs Next cycle). */
+function focusMark(){
+  var a = document.activeElement, box = a && a.closest ? a.closest("#prog,#strip,#tt,#paneRegister,#badges") : null;
+  if (!box) return null;
+  var sel = a.hasAttribute("data-bp") ? "[data-bp=\"" + a.getAttribute("data-bp") + "\"]"
+    : a.hasAttribute("data-line") ? ".ln[data-line=\"" + a.getAttribute("data-line") + "\"]"
+    : a.hasAttribute("data-reg") ? "[data-reg=\"" + a.getAttribute("data-reg") + "\"]"
+    : a.hasAttribute("data-cc") ? "[data-cc=\"" + a.getAttribute("data-cc") + "\"]"
+    : a.hasAttribute("data-win") ? "[data-win=\"" + a.getAttribute("data-win") + "\"]"
+    : a.id ? "#" + a.id : "";
+  return sel ? {box:box.id, sel:sel} : null;
+}
+function refocus(m){
+  if (!m) return;
+  var el = $(m.box).querySelector(m.sel);
+  if (el && el.focus && !el.disabled) el.focus({preventScroll:true});
+}
+function act(fn){ return function(ev){ fn(ev); if (ev && ev.currentTarget && ev.currentTarget.blur && ev.detail > 0) ev.currentTarget.blur(); }; }
+$("btnNext").addEventListener("click", act(function(){ stopPlay(); if (S.revealed) S.note = ""; next(); render(); }));
+$("btnPrev").addEventListener("click", act(function(){ stopPlay(); S.note = ""; goTo(S.cur - 1); render(); }));
+$("btnPlay").addEventListener("click", act(function(){ play(); }));
+$("btnPause").addEventListener("click", act(function(){ stopPlay(); render(); }));
+$("btnEnd").addEventListener("click", act(function(){ stopPlay(); S.note = ""; goTo(S.U.last); render(); }));
+$("btnReset").addEventListener("click", act(function(){ resetRun(); }));
+function resetRun(){ stopPlay(); S.cur = 0; S.reached = 0; S.revealed = true; S.note = ""; render(); }
+$("speed").addEventListener("input", function(){ respeed(); renderControls(); });
+$("btnHide").addEventListener("click", act(function(){ S.hide = !S.hide; if (!S.hide) S.revealed = true; render(); }));
+function segClick(id, key){
+  $(id).addEventListener("click", function(ev){
+    var b = ev.target.closest("button"); if (!b || b.disabled || b.getAttribute("aria-disabled") === "true") return;
+    var o = {view:S.opt.view, branch:S.opt.branch, memory:S.opt.memory}; o[key] = b.getAttribute("data-v");
+    if (o[key] === S.opt[key]) return;
+    /* The program is rerun with the new option. At the end of a finished run the end of the new run is shown (so the two
+       totals can be compared); otherwise the same clock cycle is shown again (or the last cycle of a shorter run).
+       A cycle that was still hidden (Hide outputs) stays hidden. */
+    var was = S.cur, wasEnd = was > 0 && S.revealed && was >= S.U.last, hidden = !S.revealed, oldLast = S.U.last;
+    load(S.src, o);
+    if (was > 0){
+      goTo(wasEnd ? S.U.last : was);
+      S.note = wasEnd ? (S.U.last === oldLast ? "Options changed: the program was rerun. The new run also ends in CC" + S.cur + "; its end is shown."
+          : "Options changed: the program was rerun. The end of the new run is shown: CC" + S.cur + " (the old run ended in CC" + oldLast + ").")
+        : S.cur === was ? "Options changed: the program was rerun and CC" + S.cur + " is shown again."
+        : "Options changed: the program was rerun. The new run ends in CC" + S.cur + ", so that cycle is shown.";
+      if (hidden && S.hide){ S.reached = S.cur; S.revealed = false; }
+    }
+    var fm = ev.detail === 0 ? {box:id, sel:"[data-v=\"" + b.getAttribute("data-v") + "\"]"} : null;
+    render();
+    if (ev.detail > 0) b.blur(); else refocus(fm);
+  });
+}
+segClick("segView", "view"); segClick("segBranch", "branch"); segClick("segMem", "memory");
+$("preset").addEventListener("change", function(){
+  var i = parseInt(this.value, 10);
+  if (!(i >= 0)){ syncPreset(); return; }
+  S.bps = {};
+  S.editing = false; S.draft = null;
+  /* the example brings its own Branch and Memory settings; the View switch stays as the user set it */
+  load(PRESETS[i].src, {view:S.opt.view, branch:PRESETS[i].opt.branch, memory:PRESETS[i].opt.memory});
+  setEditing(false); render();
+  this.blur();
+});
+$("btnEdit").addEventListener("click", function(){ stopPlay(); setEditing(true); render(); $("code").focus(); });
+$("btnCancel").addEventListener("click", function(){ setEditing(false); });
+$("btnLoad").addEventListener("click", function(){
+  var cd = $("code"), src = cd.value, old = S.bps;
+  S.bps = {};                      /* breakpoints belong to the lines of the old text, so a newly loaded text starts without them */
+  if (load(src, S.opt)){ setEditing(false); render(); return; }
+  S.bps = old;
+  /* the line with the error is selected in the editor and scrolled into view */
+  var bad = +$("loadMsg").getAttribute("data-line") || 0, lines = src.replace(/\r\n?/g, "\n").split("\n");
+  if (bad >= 1 && bad <= lines.length){
+    var start = 0, i2;
+    for (i2 = 0; i2 < bad - 1; i2++) start += lines[i2].length + 1;
+    cd.focus();
+    try{ cd.setSelectionRange(start, start + lines[bad - 1].length); }catch(e){}
+    var lh = parseFloat(getComputedStyle(cd).lineHeight) || 16, top = (bad - 1) * lh;
+    if (top < cd.scrollTop || top + lh > cd.scrollTop + cd.clientHeight) cd.scrollTop = Math.max(0, top - cd.clientHeight / 2);
+  }
+});
+$("prog").addEventListener("click", function(ev){
+  var bp = ev.target.closest(".bp"), fm = ev.detail === 0 ? focusMark() : null;
+  if (bp){ var l = +bp.getAttribute("data-bp"); if (S.bps[l]) delete S.bps[l]; else S.bps[l] = true; renderProgram(); refocus(fm); return; }
+  var ln = ev.target.closest(".ln.tr");
+  if (ln){ runToLine(+ln.getAttribute("data-line")); refocus(fm); }
+});
+/* Run to here from the keyboard: Enter or Space on a program line */
+$("prog").addEventListener("keydown", function(ev){
+  var ln = ev.target.classList && ev.target.classList.contains("ln") ? ev.target : null;
+  if (!ln || !ln.classList.contains("tr") || (ev.key !== "Enter" && ev.key !== " " && ev.key !== "Spacebar")) return;
+  ev.preventDefault(); ev.stopPropagation();
+  var fm = focusMark();
+  runToLine(+ln.getAttribute("data-line")); refocus(fm);
+});
+$("tt").addEventListener("click", function(ev){
+  var b = ev.target.closest(".cc"); if (!b) return;
+  var fm = ev.detail === 0 ? focusMark() : null;
+  stopPlay(); S.note = ""; goTo(+b.getAttribute("data-cc")); render(); refocus(fm);
+});
+/* long runs: move 40 cycles at a time, or jump to a cycle number */
+function gotoTyped(){
+  var el = $("gotoCC"); if (!el) return;
+  var s = el.value.trim(), n = /^\d{1,5}$/.test(s) ? +s : 0;
+  stopPlay();
+  if (n >= 1 && n <= S.reached){ S.note = ""; goTo(n); }
+  else S.note = "Go to CC: enter a whole number from 1 to " + S.reached + " (the clock cycles run so far).";
+  render();
+}
+$("badges").addEventListener("click", function(ev){
+  var b = ev.target.closest("button"); if (!b) return;
+  if (b.id === "gotoBtn"){ gotoTyped(); return; }
+  var d = +b.getAttribute("data-win"); if (!d) return;
+  stopPlay(); S.note = "";
+  var c = Math.max(1, Math.min(S.reached, S.cur + 40 * d));
+  if (!S.revealed && c >= S.reached){ render(); return; }
+  goTo(c); render();
+});
+$("badges").addEventListener("keydown", function(ev){ if (ev.key === "Enter" && ev.target.id === "gotoCC"){ ev.preventDefault(); gotoTyped(); } });
+function pickReg(ev){
+  var b = ev.target.closest("[data-reg]"); if (!b || isFocus()) return;
+  var fm = ev.detail === 0 ? focusMark() : null;
+  S.sel = b.getAttribute("data-reg"); S.tab = "register"; renderStrip(); renderTabs(); refocus(fm);
+}
+$("strip").addEventListener("click", pickReg);
+$("paneRegister").addEventListener("click", pickReg);
+document.querySelector(".tabs").addEventListener("click", function(ev){
+  var b = ev.target.closest("button"); if (!b) return;
+  S.tab = b.getAttribute("data-t"); renderStrip(); renderTabs();
+  if (ev.detail > 0) b.blur();      /* a mouse click leaves no focus on the tab, so Space still runs Next cycle */
+});
+["pIF","pID","pEX","pMEM","pWB"].forEach(function(id){ $(id).addEventListener("input", renderPerf); });
+function setFocus(on){
+  /* Focus shows the program list, not the editor. A typed program that is not loaded yet is kept and comes back with the
+     editor when Focus is left. */
+  if (on && S.editing){ S.draft = $("code").value; setEditing(false); }
+  document.documentElement.classList.toggle("focus", on);
+  if (!on && typeof S.draft === "string"){ var dr = S.draft; S.draft = null; setEditing(true, dr); }
+  $("focusTxt").innerHTML = on ? "&#10006; Leave focus" : "&#10530; Focus";
+  $("btnFocus").title = on ? "Return to the normal layout (or press Esc)" : "Enlarge the pipeline and the timing table to the whole window";
+  renderStrip(); renderTable();
+}
+$("btnFocus").addEventListener("click", act(function(){ setFocus(!isFocus()); }));
+function typing(ev){
+  var t = ev.target, tag = (t && t.tagName) ? t.tagName.toLowerCase() : "";
+  if (tag === "textarea" || tag === "select") return true;
+  if (tag === "input") return t.type !== "range";
+  return false;
+}
+document.addEventListener("keydown", function(ev){
+  if (ev.key === "Escape" && isFocus()){ setFocus(false); return; }
+  if (typing(ev) || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  var tag = ev.target && ev.target.tagName ? ev.target.tagName.toLowerCase() : "";
+  /* when the timing table itself has the keyboard focus and is wider than its panel, the Left and Right arrows scroll it */
+  if ((ev.key === "ArrowRight" || ev.key === "ArrowLeft") && ev.target === $("ttScroll") && ev.target.scrollWidth > ev.target.clientWidth + 1) return;
+  if (ev.key === " " || ev.key === "Spacebar"){
+    if (tag === "button") return;          /* Space on a focused button presses that button */
+    ev.preventDefault(); $("btnNext").click();
+  } else if (ev.key === "ArrowRight"){
+    if (tag === "input") return;
+    ev.preventDefault(); $("btnNext").click();
+  } else if (ev.key === "ArrowLeft"){
+    if (tag === "input") return;
+    ev.preventDefault(); $("btnPrev").click();
+  } else if (ev.key === "r" || ev.key === "R"){ ev.preventDefault(); resetRun(); }
+});
+
+/* ---------------- resizable columns ---------------- */
+/* Drag the handle between two columns; double-click resets. The two side columns together never take more than half of the window,
+   so the pipeline and the table always keep room. Widths (in text units) are remembered by the browser when it allows it. */
+var fitSides = (function(){
+  var main = $("main");
+  var MIN = {"--left":12, "--right":16}, SIDE = {"--left":".side.left", "--right":".side.right"};
+  function store(key, v){ try{ if (v === null) localStorage.removeItem("pipe_" + key); else localStorage.setItem("pipe_" + key, v); }catch(e){} }
+  function recall(key){ try{ return localStorage.getItem("pipe_" + key); }catch(e){ return null; } }
+  function unit(){ return parseFloat(getComputedStyle(document.documentElement).fontSize) || 12; }
+  function width(key){ return main.querySelector(SIDE[key]).getBoundingClientRect().width / unit(); }
+  function budget(){ return window.innerWidth * 0.5 / unit(); }
+  /* the right column is never narrower than its three tabs (Values, Pipeline register, Performance) */
+  function minOf(key){
+    if (key !== "--right") return MIN[key];
+    var t = document.querySelector(".tabs"), bs = t.querySelectorAll("button"), w = 0, cs = getComputedStyle(t), pc = getComputedStyle(t.parentNode);
+    for (var i = 0; i < bs.length; i++) w += bs[i].getBoundingClientRect().width;
+    w += (bs.length - 1) * (parseFloat(cs.columnGap) || 0) + parseFloat(pc.paddingLeft) + parseFloat(pc.paddingRight) + 2 * (parseFloat(pc.borderLeftWidth) || 0) + 2;
+    return Math.max(MIN[key], Math.ceil(w / unit() * 100) / 100);
+  }
+  /* widths that no longer fit this window go back to the standard widths */
+  function fit(){
+    if (window.innerWidth < 1100 || isFocus()) return;
+    if (width("--left") + width("--right") > budget() + 0.05){
+      main.style.removeProperty("--left"); main.style.removeProperty("--right");
+      store("--left", null); store("--right", null);
+    }
+    if (width("--right") < minOf("--right") - 0.05) main.style.setProperty("--right", minOf("--right") + "rem");
+  }
+  Object.keys(MIN).forEach(function(k){ var v = parseFloat(recall(k)); if (v >= MIN[k] && v <= 200) main.style.setProperty(k, v + "rem"); });
+  fit();
+  function setup(id, key, side){
+    var g = $(id), startX = 0, startW = 0, cur = 0, other = key === "--left" ? "--right" : "--left";
+    g.addEventListener("pointerdown", function(ev){
+      startX = ev.clientX; startW = width(key); cur = startW;
+      g.classList.add("drag"); try{ g.setPointerCapture(ev.pointerId); }catch(e){} ev.preventDefault();
+    });
+    g.addEventListener("pointermove", function(ev){
+      if (!g.classList.contains("drag")) return;
+      var mn = minOf(key), dx = (ev.clientX - startX) / unit(), max = Math.max(mn, budget() - width(other));
+      cur = Math.max(mn, Math.min(max, side === "l" ? startW + dx : startW - dx));
+      main.style.setProperty(key, cur.toFixed(2) + "rem");
+      drawArrows();
+    });
+    function end(){ if (!g.classList.contains("drag")) return; g.classList.remove("drag"); store(key, cur.toFixed(2)); renderTable(); }
+    g.addEventListener("pointerup", end); g.addEventListener("pointercancel", end);
+    g.addEventListener("dblclick", function(){ main.style.removeProperty(key); store(key, null); renderTable(); });
+  }
+  setup("gutL", "--left", "l"); setup("gutR", "--right", "r");
+  return fit;
+})();
+var scrollPending = false;
+$("ttScroll").addEventListener("scroll", function(){ if (scrollPending) return; scrollPending = true; requestAnimationFrame(function(){ scrollPending = false; drawArrows(); }); });
+var resizeTimer = null;
+window.addEventListener("resize", function(){ if (resizeTimer) clearTimeout(resizeTimer); resizeTimer = setTimeout(function(){ resizeTimer = null; fitSides(); renderTable(); }, 60); });
+
+/* ---------------- start ---------------- */
+(function(){
+  $("footer").textContent = "© 2026 Dr. Bhargav Bhatkalkar, KFSCIS, Florida International University · v" + C.VERSION;
+  load(PRESETS[0].src, PRESETS[0].opt);
+  setEditing(false);
+  render();
+})();
+})();
+</script>
+</body>
+</html>
