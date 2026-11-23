@@ -1,8 +1,14 @@
 <!DOCTYPE html>
+<!--
+    Five-Stage MIPS Pipeline Simulator - Version 2.0
+    Created by Bhargav Bhatkalkar
+    (c) 2026 Bhargav Bhatkalkar. All rights reserved.
+-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="author" content="Bhargav Bhatkalkar">
 <title>Five-Stage MIPS Pipeline Simulator</title>
 <style>
 :root{--bg:#ffffff;--fg:#1d2430;--panel:#ffffff;--line:#c9ced7;--muted:#4f5867;--accent:#D9762B;--accent2:#e2873e;--accent-dark:#8a4513;--accent-soft:#FBE9DA;--accent-pale:#fff7ef;
@@ -428,7 +434,7 @@ html.focus .stg .st{min-height:2.5em}
 /* Simulation core: assembler, machine state, cycle-by-cycle pipeline model. No DOM access. Runs in the browser and in Node.js. */
 var PipelineCore = (function(){
 "use strict";
-var VERSION = "1";
+var VERSION = "2";
 var REG_NAMES = ["$zero","$at","$v0","$v1","$a0","$a1","$a2","$a3","$t0","$t1","$t2","$t3","$t4","$t5","$t6","$t7",
   "$s0","$s1","$s2","$s3","$s4","$s5","$s6","$s7","$t8","$t9","$k0","$k1","$gp","$sp","$fp","$ra"];
 var TEXT_BASE = 0x00400000;
@@ -2507,7 +2513,7 @@ window.addEventListener("resize", function(){ if (resizeTimer) clearTimeout(resi
 
 /* ---------------- start ---------------- */
 (function(){
-  $("footer").textContent = "© 2026 Dr. Bhargav Bhatkalkar, KFSCIS, Florida International University · v" + C.VERSION;
+  $("footer").textContent = "© 2026 Bhargav Bhatkalkar · v" + C.VERSION;
   load(PRESETS[0].src, PRESETS[0].opt);
   setEditing(false);
   render();
