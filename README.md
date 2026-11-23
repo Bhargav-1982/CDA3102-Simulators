@@ -17,7 +17,7 @@ There is nothing to install. Open a link and start. Google Chrome is the preferr
 
 ## Copyright
 
-© 2026 Bhargav Bhatkalkar, Ph.D. All rights reserved.
+© 2026 Bhargav Bhatkalkar. All rights reserved.
 
 You are free to use these tools through their web links.
 Please do not copy, modify, or redistribute the code without permission.
