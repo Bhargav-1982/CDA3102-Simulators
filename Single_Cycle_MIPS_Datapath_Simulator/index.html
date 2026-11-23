@@ -1,8 +1,14 @@
 <!doctype html>
+<!--
+    Single-Cycle MIPS Datapath Simulator - Version 3.0
+    Created by Bhargav Bhatkalkar
+    (c) 2026 Bhargav Bhatkalkar. All rights reserved.
+-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="author" content="Bhargav Bhatkalkar">
 <title>Single-Cycle MIPS Datapath Simulator</title>
 <style>
 :root{--bg:#f7f6f2;--fg:#1d2430;--panel:#ffffff;--line:#cfd4dc;--muted:#5d6675;--accent:#d9792a;--accent-soft:#fbe9d8;--blue:#1f4fd8;--good:#2e7d4f;--chip:#eef1f6;--red:#c62828;
@@ -4109,7 +4115,7 @@ body.focus .stage{font-size:13px;height:46px}
 /* Simulation core: assembler, machine state, per-step trace. No DOM access. Runs in the browser and in Node.js. */
 var CORE = (function(){
 "use strict";
-var VERSION = "2";
+var VERSION = "3";
 var REG_NAMES = ["$zero","$at","$v0","$v1","$a0","$a1","$a2","$a3","$t0","$t1","$t2","$t3","$t4","$t5","$t6","$t7",
   "$s0","$s1","$s2","$s3","$s4","$s5","$s6","$s7","$t8","$t9","$k0","$k1","$gp","$sp","$fp","$ra"];
 var TEXT_BASE = 0x00400000;
@@ -5166,7 +5172,7 @@ document.addEventListener("keydown", function(ev){
   else if (ev.key === "Escape" && document.body.classList.contains("focus")){ $("btnFocus").click(); }
 });
 
-$("footer").textContent = "© 2026 Dr. Bhargav Bhatkalkar, KFSCIS, Florida International University · v" + C.VERSION;
+$("footer").textContent = "© 2026 Bhargav Bhatkalkar · v" + C.VERSION;
 
 /* ---------------- Resizable columns ---------------- */
 /* Drag the handle between two columns; double-click resets. Widths are remembered by the browser (localStorage) when it allows it. */
